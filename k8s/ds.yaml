@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    k8s-app: wgmesh
+  name: wgmesh
+spec:
+  selector:
+    matchLabels:
+      app: wgmesh
+  template:
+    metadata:
+      annotations:
+      labels:
+        app: wgmesh
+    spec:
+      containers:
+      - command:
+        - /wgmesh
+        env:
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        image: docker.io/jcodybaker/wgmesh:latest
+        imagePullPolicy: Always
+        name: wgmesh-agent
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - SYS_MODULE
+          privileged: true
+        volumeMounts:
+        - mountPath: /lib/modules
+          name: lib-modules
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      initContainers:
+      restartPolicy: Always
+      securityContext: {}
+      serviceAccount: wgmesh
+      serviceAccountName: wgmesh
+      terminationGracePeriodSeconds: 1
+      tolerations:
+      - operator: Exists
+      volumes:
+      - hostPath:
+          path: /sys/fs/bpf
+          type: DirectoryOrCreate
+        name: bpf-maps
+      - hostPath:
+          path: /lib/modules
+          type: ""
+        name: lib-modules
