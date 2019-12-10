@@ -27,10 +27,10 @@ SOFTWARE.
 
 package v1alpha1
 
-// WireguardPeerListerExpansion allows custom methods to be added to
-// WireguardPeerLister.
-type WireguardPeerListerExpansion interface{}
+// WireGuardPeerListerExpansion allows custom methods to be added to
+// WireGuardPeerLister.
+type WireGuardPeerListerExpansion interface{}
 
-// WireguardPeerNamespaceListerExpansion allows custom methods to be added to
-// WireguardPeerNamespaceLister.
-type WireguardPeerNamespaceListerExpansion interface{}
+// WireGuardPeerNamespaceListerExpansion allows custom methods to be added to
+// WireGuardPeerNamespaceLister.
+type WireGuardPeerNamespaceListerExpansion interface{}

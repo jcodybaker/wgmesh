@@ -35,7 +35,7 @@ import (
 
 type WgmeshV1alpha1Interface interface {
 	RESTClient() rest.Interface
-	WireguardPeersGetter
+	WireGuardPeersGetter
 }
 
 // WgmeshV1alpha1Client is used to interact with features provided by the wgmesh.codybaker.com group.
@@ -43,8 +43,8 @@ type WgmeshV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *WgmeshV1alpha1Client) WireguardPeers(namespace string) WireguardPeerInterface {
-	return newWireguardPeers(c, namespace)
+func (c *WgmeshV1alpha1Client) WireGuardPeers(namespace string) WireGuardPeerInterface {
+	return newWireGuardPeers(c, namespace)
 }
 
 // NewForConfig creates a new WgmeshV1alpha1Client for the given config.

@@ -36,14 +36,14 @@ const (
 	// GroupName is the group name used in this package.
 	GroupName string = "wgmesh.codybaker.com"
 	// Kind ...
-	Kind string = "WireguardPeer"
+	Kind string = "WireGuardPeer"
 	// GroupVersion is the version.
 	GroupVersion string = "v1alpha1"
-	// Plural is the Plural for WireguardPeer.
+	// Plural is the Plural for WireGuardPeer.
 	Plural string = "wireguardpeers"
-	// Singular is the singular for WireguardPeer.
+	// Singular is the singular for WireGuardPeer.
 	Singular string = "wireguardpeer"
-	// CRDName is the CRD name for WireguardPeer.
+	// CRDName is the CRD name for WireGuardPeer.
 	CRDName string = Plural + "." + GroupName
 )
 
@@ -69,8 +69,8 @@ func Resource(resource string) schema.GroupResource {
 // addKnownTypes adds the set of types defined in this package to the supplied scheme.
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
-		&WireguardPeer{},
-		&WireguardPeerList{},
+		&WireGuardPeer{},
+		&WireGuardPeerList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 

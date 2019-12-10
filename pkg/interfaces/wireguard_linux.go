@@ -29,6 +29,7 @@ func EnsureWireguardInterface(wgClient *wgctrl.Client, iface string) error {
 	default:
 		return fmt.Errorf("verifying wireguard device %q: %w", iface, err)
 	}
+	return nil
 }
 
 func addWireguardInterface(iface string) error {
@@ -53,5 +54,5 @@ func (w *wgLink) Type() string {
 func (w *wgLink) Attrs() *netlink.LinkAttrs {
 	attr := netlink.NewLinkAttrs()
 	attr.Name = w.name
-	return attr
+	return &attr
 }

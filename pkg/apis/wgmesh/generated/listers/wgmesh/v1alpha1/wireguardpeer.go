@@ -34,64 +34,64 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// WireguardPeerLister helps list WireguardPeers.
-type WireguardPeerLister interface {
-	// List lists all WireguardPeers in the indexer.
-	List(selector labels.Selector) (ret []*v1alpha1.WireguardPeer, err error)
-	// WireguardPeers returns an object that can list and get WireguardPeers.
-	WireguardPeers(namespace string) WireguardPeerNamespaceLister
-	WireguardPeerListerExpansion
+// WireGuardPeerLister helps list WireGuardPeers.
+type WireGuardPeerLister interface {
+	// List lists all WireGuardPeers in the indexer.
+	List(selector labels.Selector) (ret []*v1alpha1.WireGuardPeer, err error)
+	// WireGuardPeers returns an object that can list and get WireGuardPeers.
+	WireGuardPeers(namespace string) WireGuardPeerNamespaceLister
+	WireGuardPeerListerExpansion
 }
 
-// wireguardPeerLister implements the WireguardPeerLister interface.
-type wireguardPeerLister struct {
+// wireGuardPeerLister implements the WireGuardPeerLister interface.
+type wireGuardPeerLister struct {
 	indexer cache.Indexer
 }
 
-// NewWireguardPeerLister returns a new WireguardPeerLister.
-func NewWireguardPeerLister(indexer cache.Indexer) WireguardPeerLister {
-	return &wireguardPeerLister{indexer: indexer}
+// NewWireGuardPeerLister returns a new WireGuardPeerLister.
+func NewWireGuardPeerLister(indexer cache.Indexer) WireGuardPeerLister {
+	return &wireGuardPeerLister{indexer: indexer}
 }
 
-// List lists all WireguardPeers in the indexer.
-func (s *wireguardPeerLister) List(selector labels.Selector) (ret []*v1alpha1.WireguardPeer, err error) {
+// List lists all WireGuardPeers in the indexer.
+func (s *wireGuardPeerLister) List(selector labels.Selector) (ret []*v1alpha1.WireGuardPeer, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.WireguardPeer))
+		ret = append(ret, m.(*v1alpha1.WireGuardPeer))
 	})
 	return ret, err
 }
 
-// WireguardPeers returns an object that can list and get WireguardPeers.
-func (s *wireguardPeerLister) WireguardPeers(namespace string) WireguardPeerNamespaceLister {
-	return wireguardPeerNamespaceLister{indexer: s.indexer, namespace: namespace}
+// WireGuardPeers returns an object that can list and get WireGuardPeers.
+func (s *wireGuardPeerLister) WireGuardPeers(namespace string) WireGuardPeerNamespaceLister {
+	return wireGuardPeerNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
-// WireguardPeerNamespaceLister helps list and get WireguardPeers.
-type WireguardPeerNamespaceLister interface {
-	// List lists all WireguardPeers in the indexer for a given namespace.
-	List(selector labels.Selector) (ret []*v1alpha1.WireguardPeer, err error)
-	// Get retrieves the WireguardPeer from the indexer for a given namespace and name.
-	Get(name string) (*v1alpha1.WireguardPeer, error)
-	WireguardPeerNamespaceListerExpansion
+// WireGuardPeerNamespaceLister helps list and get WireGuardPeers.
+type WireGuardPeerNamespaceLister interface {
+	// List lists all WireGuardPeers in the indexer for a given namespace.
+	List(selector labels.Selector) (ret []*v1alpha1.WireGuardPeer, err error)
+	// Get retrieves the WireGuardPeer from the indexer for a given namespace and name.
+	Get(name string) (*v1alpha1.WireGuardPeer, error)
+	WireGuardPeerNamespaceListerExpansion
 }
 
-// wireguardPeerNamespaceLister implements the WireguardPeerNamespaceLister
+// wireGuardPeerNamespaceLister implements the WireGuardPeerNamespaceLister
 // interface.
-type wireguardPeerNamespaceLister struct {
+type wireGuardPeerNamespaceLister struct {
 	indexer   cache.Indexer
 	namespace string
 }
 
-// List lists all WireguardPeers in the indexer for a given namespace.
-func (s wireguardPeerNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.WireguardPeer, err error) {
+// List lists all WireGuardPeers in the indexer for a given namespace.
+func (s wireGuardPeerNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.WireGuardPeer, err error) {
 	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.WireguardPeer))
+		ret = append(ret, m.(*v1alpha1.WireGuardPeer))
 	})
 	return ret, err
 }
 
-// Get retrieves the WireguardPeer from the indexer for a given namespace and name.
-func (s wireguardPeerNamespaceLister) Get(name string) (*v1alpha1.WireguardPeer, error) {
+// Get retrieves the WireGuardPeer from the indexer for a given namespace and name.
+func (s wireGuardPeerNamespaceLister) Get(name string) (*v1alpha1.WireGuardPeer, error) {
 	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err
@@ -99,5 +99,5 @@ func (s wireguardPeerNamespaceLister) Get(name string) (*v1alpha1.WireguardPeer,
 	if !exists {
 		return nil, errors.NewNotFound(v1alpha1.Resource("wireguardpeer"), name)
 	}
-	return obj.(*v1alpha1.WireguardPeer), nil
+	return obj.(*v1alpha1.WireGuardPeer), nil
 }

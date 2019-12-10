@@ -37,8 +37,8 @@ import (
 	testing "k8s.io/client-go/testing"
 )
 
-// FakeWireguardPeers implements WireguardPeerInterface
-type FakeWireguardPeers struct {
+// FakeWireGuardPeers implements WireGuardPeerInterface
+type FakeWireGuardPeers struct {
 	Fake *FakeWgmeshV1alpha1
 	ns   string
 }
@@ -47,21 +47,21 @@ var wireguardpeersResource = schema.GroupVersionResource{Group: "wgmesh.codybake
 
 var wireguardpeersKind = schema.GroupVersionKind{Group: "wgmesh.codybaker.com", Version: "v1alpha1", Kind: "WireguardPeer"}
 
-// Get takes name of the wireguardPeer, and returns the corresponding wireguardPeer object, and an error if there is any.
-func (c *FakeWireguardPeers) Get(name string, options v1.GetOptions) (result *v1alpha1.WireguardPeer, err error) {
+// Get takes name of the wireGuardPeer, and returns the corresponding wireGuardPeer object, and an error if there is any.
+func (c *FakeWireGuardPeers) Get(name string, options v1.GetOptions) (result *v1alpha1.WireGuardPeer, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(wireguardpeersResource, c.ns, name), &v1alpha1.WireguardPeer{})
+		Invokes(testing.NewGetAction(wireguardpeersResource, c.ns, name), &v1alpha1.WireGuardPeer{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*v1alpha1.WireguardPeer), err
+	return obj.(*v1alpha1.WireGuardPeer), err
 }
 
-// List takes label and field selectors, and returns the list of WireguardPeers that match those selectors.
-func (c *FakeWireguardPeers) List(opts v1.ListOptions) (result *v1alpha1.WireguardPeerList, err error) {
+// List takes label and field selectors, and returns the list of WireGuardPeers that match those selectors.
+func (c *FakeWireGuardPeers) List(opts v1.ListOptions) (result *v1alpha1.WireGuardPeerList, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(wireguardpeersResource, wireguardpeersKind, c.ns, opts), &v1alpha1.WireguardPeerList{})
+		Invokes(testing.NewListAction(wireguardpeersResource, wireguardpeersKind, c.ns, opts), &v1alpha1.WireGuardPeerList{})
 
 	if obj == nil {
 		return nil, err
@@ -71,8 +71,8 @@ func (c *FakeWireguardPeers) List(opts v1.ListOptions) (result *v1alpha1.Wiregua
 	if label == nil {
 		label = labels.Everything()
 	}
-	list := &v1alpha1.WireguardPeerList{ListMeta: obj.(*v1alpha1.WireguardPeerList).ListMeta}
-	for _, item := range obj.(*v1alpha1.WireguardPeerList).Items {
+	list := &v1alpha1.WireGuardPeerList{ListMeta: obj.(*v1alpha1.WireGuardPeerList).ListMeta}
+	for _, item := range obj.(*v1alpha1.WireGuardPeerList).Items {
 		if label.Matches(labels.Set(item.Labels)) {
 			list.Items = append(list.Items, item)
 		}
@@ -80,58 +80,58 @@ func (c *FakeWireguardPeers) List(opts v1.ListOptions) (result *v1alpha1.Wiregua
 	return list, err
 }
 
-// Watch returns a watch.Interface that watches the requested wireguardPeers.
-func (c *FakeWireguardPeers) Watch(opts v1.ListOptions) (watch.Interface, error) {
+// Watch returns a watch.Interface that watches the requested wireGuardPeers.
+func (c *FakeWireGuardPeers) Watch(opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(wireguardpeersResource, c.ns, opts))
 
 }
 
-// Create takes the representation of a wireguardPeer and creates it.  Returns the server's representation of the wireguardPeer, and an error, if there is any.
-func (c *FakeWireguardPeers) Create(wireguardPeer *v1alpha1.WireguardPeer) (result *v1alpha1.WireguardPeer, err error) {
+// Create takes the representation of a wireGuardPeer and creates it.  Returns the server's representation of the wireGuardPeer, and an error, if there is any.
+func (c *FakeWireGuardPeers) Create(wireGuardPeer *v1alpha1.WireGuardPeer) (result *v1alpha1.WireGuardPeer, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(wireguardpeersResource, c.ns, wireguardPeer), &v1alpha1.WireguardPeer{})
+		Invokes(testing.NewCreateAction(wireguardpeersResource, c.ns, wireGuardPeer), &v1alpha1.WireGuardPeer{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*v1alpha1.WireguardPeer), err
+	return obj.(*v1alpha1.WireGuardPeer), err
 }
 
-// Update takes the representation of a wireguardPeer and updates it. Returns the server's representation of the wireguardPeer, and an error, if there is any.
-func (c *FakeWireguardPeers) Update(wireguardPeer *v1alpha1.WireguardPeer) (result *v1alpha1.WireguardPeer, err error) {
+// Update takes the representation of a wireGuardPeer and updates it. Returns the server's representation of the wireGuardPeer, and an error, if there is any.
+func (c *FakeWireGuardPeers) Update(wireGuardPeer *v1alpha1.WireGuardPeer) (result *v1alpha1.WireGuardPeer, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(wireguardpeersResource, c.ns, wireguardPeer), &v1alpha1.WireguardPeer{})
+		Invokes(testing.NewUpdateAction(wireguardpeersResource, c.ns, wireGuardPeer), &v1alpha1.WireGuardPeer{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*v1alpha1.WireguardPeer), err
+	return obj.(*v1alpha1.WireGuardPeer), err
 }
 
-// Delete takes name of the wireguardPeer and deletes it. Returns an error if one occurs.
-func (c *FakeWireguardPeers) Delete(name string, options *v1.DeleteOptions) error {
+// Delete takes name of the wireGuardPeer and deletes it. Returns an error if one occurs.
+func (c *FakeWireGuardPeers) Delete(name string, options *v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(wireguardpeersResource, c.ns, name), &v1alpha1.WireguardPeer{})
+		Invokes(testing.NewDeleteAction(wireguardpeersResource, c.ns, name), &v1alpha1.WireGuardPeer{})
 
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakeWireguardPeers) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
+func (c *FakeWireGuardPeers) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
 	action := testing.NewDeleteCollectionAction(wireguardpeersResource, c.ns, listOptions)
 
-	_, err := c.Fake.Invokes(action, &v1alpha1.WireguardPeerList{})
+	_, err := c.Fake.Invokes(action, &v1alpha1.WireGuardPeerList{})
 	return err
 }
 
-// Patch applies the patch and returns the patched wireguardPeer.
-func (c *FakeWireguardPeers) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.WireguardPeer, err error) {
+// Patch applies the patch and returns the patched wireGuardPeer.
+func (c *FakeWireGuardPeers) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.WireGuardPeer, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(wireguardpeersResource, c.ns, name, pt, data, subresources...), &v1alpha1.WireguardPeer{})
+		Invokes(testing.NewPatchSubresourceAction(wireguardpeersResource, c.ns, name, pt, data, subresources...), &v1alpha1.WireGuardPeer{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*v1alpha1.WireguardPeer), err
+	return obj.(*v1alpha1.WireGuardPeer), err
 }

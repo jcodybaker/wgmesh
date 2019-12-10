@@ -33,8 +33,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
-	// WireguardPeers returns a WireguardPeerInformer.
-	WireguardPeers() WireguardPeerInformer
+	// WireGuardPeers returns a WireGuardPeerInformer.
+	WireGuardPeers() WireGuardPeerInformer
 }
 
 type version struct {
@@ -48,7 +48,7 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// WireguardPeers returns a WireguardPeerInformer.
-func (v *version) WireguardPeers() WireguardPeerInformer {
-	return &wireguardPeerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+// WireGuardPeers returns a WireGuardPeerInformer.
+func (v *version) WireGuardPeers() WireGuardPeerInformer {
+	return &wireGuardPeerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

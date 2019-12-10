@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -8,16 +9,26 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jcodybaker/wgmesh/pkg/agent"
 	"github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/generated/clientset/versioned"
 
+	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/mattn/go-isatty"
 )
 
+func init() {
+	log.SetFormatter(&log.JSONFormatter{})
+	log.SetLevel(log.InfoLevel)
+}
+
 func main() {
+
 	var kubeconfig *string
 	if home := homeDir(); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
@@ -29,9 +40,27 @@ func main() {
 	hostname, _ = os.Hostname()
 	endpointName := flag.String("endpoint-name", hostname, "name of the endpoint (default hostname)")
 	bindAddress := flag.String("bind-address", "0.0.0.0:0", "address:port to bind the wireguard service")
+	keepaliveSeconds := flag.Int("keepalive-seconds", 0, "send keepalive packets every x seconds")
+	debug := flag.Bool("debug", false, "debug logging")
+
 	flag.Parse()
+
+	if debug != nil && *debug {
+		log.SetLevel(log.DebugLevel)
+	}
+	if isatty.IsTerminal(os.Stdout.Fd()) {
+		log.SetFormatter(&log.TextFormatter{})
+	}
+
+	ctx := context.Background()
+	ll := log.WithContext(ctx)
+
 	validateNodeName(endpointName)
 	bindAddr, port := validateBindAddress(bindAddress)
+	var keepalive time.Duration
+	if keepaliveSeconds != nil {
+		keepalive = time.Duration(*keepaliveSeconds) * time.Second
+	}
 
 	// use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
@@ -50,7 +79,7 @@ func main() {
 		panic(err.Error())
 	}
 
-	agent.Run(*endpointName, bindAddr, port, kubeClientset, wgmeshClientset)
+	agent.Run(ll, *endpointName, bindAddr, port, keepalive, kubeClientset, wgmeshClientset)
 }
 
 func homeDir() string {

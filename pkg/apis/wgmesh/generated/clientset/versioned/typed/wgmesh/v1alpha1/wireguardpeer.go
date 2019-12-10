@@ -38,42 +38,42 @@ import (
 	rest "k8s.io/client-go/rest"
 )
 
-// WireguardPeersGetter has a method to return a WireguardPeerInterface.
+// WireGuardPeersGetter has a method to return a WireGuardPeerInterface.
 // A group's client should implement this interface.
-type WireguardPeersGetter interface {
-	WireguardPeers(namespace string) WireguardPeerInterface
+type WireGuardPeersGetter interface {
+	WireGuardPeers(namespace string) WireGuardPeerInterface
 }
 
-// WireguardPeerInterface has methods to work with WireguardPeer resources.
-type WireguardPeerInterface interface {
-	Create(*v1alpha1.WireguardPeer) (*v1alpha1.WireguardPeer, error)
-	Update(*v1alpha1.WireguardPeer) (*v1alpha1.WireguardPeer, error)
+// WireGuardPeerInterface has methods to work with WireGuardPeer resources.
+type WireGuardPeerInterface interface {
+	Create(*v1alpha1.WireGuardPeer) (*v1alpha1.WireGuardPeer, error)
+	Update(*v1alpha1.WireGuardPeer) (*v1alpha1.WireGuardPeer, error)
 	Delete(name string, options *v1.DeleteOptions) error
 	DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error
-	Get(name string, options v1.GetOptions) (*v1alpha1.WireguardPeer, error)
-	List(opts v1.ListOptions) (*v1alpha1.WireguardPeerList, error)
+	Get(name string, options v1.GetOptions) (*v1alpha1.WireGuardPeer, error)
+	List(opts v1.ListOptions) (*v1alpha1.WireGuardPeerList, error)
 	Watch(opts v1.ListOptions) (watch.Interface, error)
-	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.WireguardPeer, err error)
-	WireguardPeerExpansion
+	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.WireGuardPeer, err error)
+	WireGuardPeerExpansion
 }
 
-// wireguardPeers implements WireguardPeerInterface
-type wireguardPeers struct {
+// wireGuardPeers implements WireGuardPeerInterface
+type wireGuardPeers struct {
 	client rest.Interface
 	ns     string
 }
 
-// newWireguardPeers returns a WireguardPeers
-func newWireguardPeers(c *WgmeshV1alpha1Client, namespace string) *wireguardPeers {
-	return &wireguardPeers{
+// newWireGuardPeers returns a WireGuardPeers
+func newWireGuardPeers(c *WgmeshV1alpha1Client, namespace string) *wireGuardPeers {
+	return &wireGuardPeers{
 		client: c.RESTClient(),
 		ns:     namespace,
 	}
 }
 
-// Get takes name of the wireguardPeer, and returns the corresponding wireguardPeer object, and an error if there is any.
-func (c *wireguardPeers) Get(name string, options v1.GetOptions) (result *v1alpha1.WireguardPeer, err error) {
-	result = &v1alpha1.WireguardPeer{}
+// Get takes name of the wireGuardPeer, and returns the corresponding wireGuardPeer object, and an error if there is any.
+func (c *wireGuardPeers) Get(name string, options v1.GetOptions) (result *v1alpha1.WireGuardPeer, err error) {
+	result = &v1alpha1.WireGuardPeer{}
 	err = c.client.Get().
 		Namespace(c.ns).
 		Resource("wireguardpeers").
@@ -84,13 +84,13 @@ func (c *wireguardPeers) Get(name string, options v1.GetOptions) (result *v1alph
 	return
 }
 
-// List takes label and field selectors, and returns the list of WireguardPeers that match those selectors.
-func (c *wireguardPeers) List(opts v1.ListOptions) (result *v1alpha1.WireguardPeerList, err error) {
+// List takes label and field selectors, and returns the list of WireGuardPeers that match those selectors.
+func (c *wireGuardPeers) List(opts v1.ListOptions) (result *v1alpha1.WireGuardPeerList, err error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
 	}
-	result = &v1alpha1.WireguardPeerList{}
+	result = &v1alpha1.WireGuardPeerList{}
 	err = c.client.Get().
 		Namespace(c.ns).
 		Resource("wireguardpeers").
@@ -101,8 +101,8 @@ func (c *wireguardPeers) List(opts v1.ListOptions) (result *v1alpha1.WireguardPe
 	return
 }
 
-// Watch returns a watch.Interface that watches the requested wireguardPeers.
-func (c *wireguardPeers) Watch(opts v1.ListOptions) (watch.Interface, error) {
+// Watch returns a watch.Interface that watches the requested wireGuardPeers.
+func (c *wireGuardPeers) Watch(opts v1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -116,33 +116,33 @@ func (c *wireguardPeers) Watch(opts v1.ListOptions) (watch.Interface, error) {
 		Watch()
 }
 
-// Create takes the representation of a wireguardPeer and creates it.  Returns the server's representation of the wireguardPeer, and an error, if there is any.
-func (c *wireguardPeers) Create(wireguardPeer *v1alpha1.WireguardPeer) (result *v1alpha1.WireguardPeer, err error) {
-	result = &v1alpha1.WireguardPeer{}
+// Create takes the representation of a wireGuardPeer and creates it.  Returns the server's representation of the wireGuardPeer, and an error, if there is any.
+func (c *wireGuardPeers) Create(wireGuardPeer *v1alpha1.WireGuardPeer) (result *v1alpha1.WireGuardPeer, err error) {
+	result = &v1alpha1.WireGuardPeer{}
 	err = c.client.Post().
 		Namespace(c.ns).
 		Resource("wireguardpeers").
-		Body(wireguardPeer).
+		Body(wireGuardPeer).
 		Do().
 		Into(result)
 	return
 }
 
-// Update takes the representation of a wireguardPeer and updates it. Returns the server's representation of the wireguardPeer, and an error, if there is any.
-func (c *wireguardPeers) Update(wireguardPeer *v1alpha1.WireguardPeer) (result *v1alpha1.WireguardPeer, err error) {
-	result = &v1alpha1.WireguardPeer{}
+// Update takes the representation of a wireGuardPeer and updates it. Returns the server's representation of the wireGuardPeer, and an error, if there is any.
+func (c *wireGuardPeers) Update(wireGuardPeer *v1alpha1.WireGuardPeer) (result *v1alpha1.WireGuardPeer, err error) {
+	result = &v1alpha1.WireGuardPeer{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("wireguardpeers").
-		Name(wireguardPeer.Name).
-		Body(wireguardPeer).
+		Name(wireGuardPeer.Name).
+		Body(wireGuardPeer).
 		Do().
 		Into(result)
 	return
 }
 
-// Delete takes name of the wireguardPeer and deletes it. Returns an error if one occurs.
-func (c *wireguardPeers) Delete(name string, options *v1.DeleteOptions) error {
+// Delete takes name of the wireGuardPeer and deletes it. Returns an error if one occurs.
+func (c *wireGuardPeers) Delete(name string, options *v1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("wireguardpeers").
@@ -153,7 +153,7 @@ func (c *wireguardPeers) Delete(name string, options *v1.DeleteOptions) error {
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *wireguardPeers) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
+func (c *wireGuardPeers) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
 	var timeout time.Duration
 	if listOptions.TimeoutSeconds != nil {
 		timeout = time.Duration(*listOptions.TimeoutSeconds) * time.Second
@@ -168,9 +168,9 @@ func (c *wireguardPeers) DeleteCollection(options *v1.DeleteOptions, listOptions
 		Error()
 }
 
-// Patch applies the patch and returns the patched wireguardPeer.
-func (c *wireguardPeers) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.WireguardPeer, err error) {
-	result = &v1alpha1.WireguardPeer{}
+// Patch applies the patch and returns the patched wireGuardPeer.
+func (c *wireGuardPeers) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.WireGuardPeer, err error) {
+	result = &v1alpha1.WireGuardPeer{}
 	err = c.client.Patch(pt).
 		Namespace(c.ns).
 		Resource("wireguardpeers").

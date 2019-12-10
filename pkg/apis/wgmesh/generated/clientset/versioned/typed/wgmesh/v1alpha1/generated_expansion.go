@@ -27,4 +27,4 @@ SOFTWARE.
 
 package v1alpha1
 
-type WireguardPeerExpansion interface{}
+type WireGuardPeerExpansion interface{}

@@ -29,35 +29,39 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// WireguardPeerSpec defines the desired state of WireguardPeer
-type WireguardPeerSpec struct {
+// WireGuardPeerSpec defines the desired state of WireGuardPeer
+type WireGuardPeerSpec struct {
 	Endpoint     string   `json:"endpoint"`
 	PublicKey    string   `json:"publicKey"`
 	PresharedKey string   `json:"presharedKey"`
 	Port         uint16   `json:"port"`
-	IP           string   `json:"ip"`
-	Routes       []string `json:"routes"`
+	IPs          []string `json:"ips,omitempty"`
+	Routes       []string `json:"routes,omitempty"`
+	// KeepAliveSeconds is the frequency which keep-alive packets will be sent to
+	// maintain connectivity between peers.
+	// NOTE: For each set of peers we use the lower of the two peers.
+	KeepAliveSeconds int `json:"keepalive,omitempty"`
 }
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +resource:path=external-peers
 
-// WireguardPeer is the Schema for the WireguardPeers API
+// WireGuardPeer is the Schema for the WireGuardPeers API
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-type WireguardPeer struct {
+type WireGuardPeer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec WireguardPeerSpec `json:"spec,omitempty"`
+	Spec WireGuardPeerSpec `json:"spec,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +resource:path=external-peers
 
-// WireguardPeerList contains a list of WireguardPeer
-type WireguardPeerList struct {
+// WireGuardPeerList contains a list of WireGuardPeer
+type WireGuardPeerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []WireguardPeer `json:"items"`
+	Items           []WireGuardPeer `json:"items"`
 }

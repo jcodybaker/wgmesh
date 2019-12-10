@@ -6,6 +6,6 @@ spec:
   group: wgmesh.codybaker.com
   version: v1alpha1
   names:
-    kind: WireguardPeer
-    plural: WireguardPeers
+    kind: WireGuardPeer
+    plural: WireGuardPeers
   scope: Namespaced

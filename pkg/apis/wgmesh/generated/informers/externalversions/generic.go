@@ -63,7 +63,7 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 	switch resource {
 	// Group=wgmesh.codybaker.com, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("wireguardpeers"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Wgmesh().V1alpha1().WireguardPeers().Informer()}, nil
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Wgmesh().V1alpha1().WireGuardPeers().Informer()}, nil
 
 	}
 

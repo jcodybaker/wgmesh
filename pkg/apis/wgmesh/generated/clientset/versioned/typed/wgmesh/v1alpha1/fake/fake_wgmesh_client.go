@@ -37,8 +37,8 @@ type FakeWgmeshV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeWgmeshV1alpha1) WireguardPeers(namespace string) v1alpha1.WireguardPeerInterface {
-	return &FakeWireguardPeers{c, namespace}
+func (c *FakeWgmeshV1alpha1) WireGuardPeers(namespace string) v1alpha1.WireGuardPeerInterface {
+	return &FakeWireGuardPeers{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate
