@@ -3,9 +3,9 @@ package agent
 import (
 	"fmt"
 	"net"
+	"reflect"
 	"sync"
 	"time"
-	"reflect"
 
 	wgk8s "github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/v1alpha1"
 	log "github.com/sirupsen/logrus"
@@ -21,6 +21,7 @@ type peerTracker struct {
 	iface                string
 	peers                map[string]*wgk8s.WireGuardPeer
 	initialConfigApplied bool
+	localPeer            *wgk8s.WireGuardPeer
 
 	keepalive time.Duration
 }
@@ -28,7 +29,7 @@ type peerTracker struct {
 func (pt *peerTracker) applyUpdate(wgPeer *wgk8s.WireGuardPeer) error {
 	pt.Lock()
 	defer pt.Unlock()
-	name := k8sNameString(wgPeer)
+	name := wgPeer.GetSelfLink()
 	if current, ok := pt.peers[name]; ok && reflect.DeepEqual(current, wgPeer) {
 		// No update
 		return nil
@@ -46,15 +47,33 @@ func (pt *peerTracker) applyUpdate(wgPeer *wgk8s.WireGuardPeer) error {
 	})
 }
 
+func (pt *peerTracker) deletePeer(wgPeer *wgk8s.WireGuardPeer) error {
+	pt.Lock()
+	defer pt.Unlock()
+	name := wgPeer.GetSelfLink()
+	current, ok := pt.peers[name]
+	if !ok {
+		return nil // We've never heard of it, goodbye.
+	}
+	if !pt.initialConfigApplied {
+		delete(pt.peers, name)
+		return nil
+	}
+	// Ok, we actually have to wind this one back.
+	peer, err := pt.k8sToWgctrl(current)
+	if err != nil {
+		return err
+	}
+	peer.Remove = true
+	return pt.wgClient.ConfigureDevice(pt.iface, wgtypes.Config{
+		Peers: []wgtypes.PeerConfig{peer},
+	})
+}
+
 func (pt *peerTracker) applyInitialConfig() error {
 	pt.Lock()
 	defer pt.Unlock()
 	pt.initialConfigApplied = true
-
-	device, err := pt.wgClient.Device(pt.iface)
-	if err != nil {
-		return fmt.Errorf("initializing peer tracker: %w", err)
-	}
 
 	var config = wgtypes.Config{
 		ReplacePeers: true,
@@ -82,39 +101,82 @@ func (pt *peerTracker) OnAdd(obj interface{}) {
 		pt.ll.WithField("unexpected_type", fmt.Sprintf("%T", obj)).
 			Warn("unexpected type")
 	}
+	if wgPeer.GetSelfLink() == pt.localPeer.GetSelfLink() {
+		// Got ourselves, no-op
+		return
+	}
 	ll := pt.ll.WithFields(log.Fields{
 		"k8s_namespace": wgPeer.Namespace,
 		"k8s_kind":      wgPeer.Kind,
 		"k8s_name":      wgPeer.Name,
 	})
+	ll.Info("WireGuardPeer added, adding peer")
 	err := pt.applyUpdate(wgPeer)
 	if err != nil {
-
+		// TODO - requeue when appropriate
+		ll.Errorf("WireGuardPeer failed to add: %v", err)
 	}
+	ll.Info("WireGuardPeer added successfully")
 }
 
-func (pt *peerTracker) OnUpdate(oldObj, newObj interface{}) {
-	pt.OnAdd(newObj)
+func (pt *peerTracker) OnUpdate(_, newObj interface{}) {
+	wgPeer, ok := newObj.(*wgk8s.WireGuardPeer)
+	if !ok {
+		pt.ll.WithField("unexpected_type", fmt.Sprintf("%T", newObj)).
+			Warn("unexpected type")
+	}
+	if wgPeer.GetSelfLink() == pt.localPeer.GetSelfLink() {
+		// Got ourselves, no-op
+		return
+	}
+	ll := pt.ll.WithFields(log.Fields{
+		"k8s_namespace": wgPeer.Namespace,
+		"k8s_kind":      wgPeer.Kind,
+		"k8s_name":      wgPeer.Name,
+	})
+	ll.Info("WireGuardPeer updated, applying changes")
+	err := pt.applyUpdate(wgPeer)
+	if err != nil {
+		// TODO - requeue when appropriate
+		ll.Errorf("WireGuardPeer failed to apply updates: %v", err)
+	}
+	ll.Info("WireGuardPeer updates applied successfully")
 }
 
 func (pt *peerTracker) OnDelete(obj interface{}) {
-	config := &wgtypes.PeerConfig{
-		PublicKey: publicKey,
-		Endpoint:  dst,
+	wgPeer, ok := obj.(*wgk8s.WireGuardPeer)
+	if !ok {
+		pt.ll.WithField("unexpected_type", fmt.Sprintf("%T", obj)).
+			Warn("unexpected type")
 	}
+	if wgPeer.GetSelfLink() == pt.localPeer.GetSelfLink() {
+		// Got ourselves, no-op
+		return
+	}
+	ll := pt.ll.WithFields(log.Fields{
+		"k8s_namespace": wgPeer.Namespace,
+		"k8s_kind":      wgPeer.Kind,
+		"k8s_name":      wgPeer.Name,
+	})
+	ll.Info("WireGuardPeer deleted, removing peer")
+	err := pt.deletePeer(wgPeer)
+	if err != nil {
+		// TODO - requeue when appropriate
+		ll.Errorf("WireGuardPeer failed to apply delete: %v", err)
+	}
+	ll.Info("WireGuardPeer successfully deleted")
 }
 
-func  (pt *peerTracker) k8sToWgctrl(wgPeer *wgk8s.WireGuardPeer) (config wgtypes.PeerConfig, err error) {
+func (pt *peerTracker) k8sToWgctrl(wgPeer *wgk8s.WireGuardPeer) (config wgtypes.PeerConfig, err error) {
 	config.PublicKey, err = wgtypes.ParseKey(wgPeer.Spec.PublicKey)
 	if err != nil {
 		err = fmt.Errorf("failed to parse public key: %w", err)
 		return
 	}
 
-	addr := net.JoinHostPort(wgPeer.Spec.Endpoint, string(wgPeer.Spec.Port))
-	config.Endpoint, err = net.ResolveUDPAddr("udp", addr)
+	config.Endpoint, err = net.ResolveUDPAddr("udp", wgPeer.Spec.Endpoint)
 	if err != nil {
-		err = fmt.Errorf("failed to resolve endpoint %q: %w", addr, err)
+		err = fmt.Errorf("failed to resolve endpoint %q: %w", wgPeer.Spec.Endpoint, err)
 		return
 	}
 
@@ -128,10 +190,6 @@ func  (pt *peerTracker) k8sToWgctrl(wgPeer *wgk8s.WireGuardPeer) (config wgtypes
 	return
 }
 
-func k8sNameString(obj metav1.Object) string {
-	return fmt.Sprintf("%s/%s/%s", obj.Kind, obj.Namespace, obj.Name)
-}
-
 func wireGuardPeerIsEqual(old, new *wgk8s.WireGuardPeer) bool {
-	return reflect.Equal(old.Spec, new.Spec)
+	return reflect.DeepEqual(old.Spec, new.Spec)
 }

@@ -34,7 +34,6 @@ type WireGuardPeerSpec struct {
 	Endpoint     string   `json:"endpoint"`
 	PublicKey    string   `json:"publicKey"`
 	PresharedKey string   `json:"presharedKey"`
-	Port         uint16   `json:"port"`
 	IPs          []string `json:"ips,omitempty"`
 	Routes       []string `json:"routes,omitempty"`
 	// KeepAliveSeconds is the frequency which keep-alive packets will be sent to

@@ -29,7 +29,7 @@ func GetIPs(iface string) ([]string, error) {
 
 // GetLocalSourceIP returns a source IP.
 func GetLocalSourceIP(dest string) (string, error) {
-	rs, err := netlink.RouteGet(net.Parse("8.8.8.8"))
+	rs, err := netlink.RouteGet(net.ParseIP(dest))
 	if err != nil {
 		return "", err
 	}

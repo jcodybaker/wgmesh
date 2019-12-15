@@ -3,6 +3,7 @@ module github.com/jcodybaker/wgmesh
 go 1.13
 
 require (
+	github.com/Showmax/go-fqdn v0.0.0-20180501083314-6f60894d629f
 	github.com/mattn/go-isatty v0.0.10
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0

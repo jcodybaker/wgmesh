@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"fmt"
+	"net"
+	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -24,28 +26,31 @@ import (
 )
 
 type agent struct {
-	name       string
-	privateKey wgtypes.Key
-	publicKey  wgtypes.Key
-	psk        wgtypes.Key
-	endpoint   string
-	port       int
-	keepalive  time.Duration
-	ips        []string
-	routes     []string
+	name         string
+	privateKey   wgtypes.Key
+	publicKey    wgtypes.Key
+	psk          wgtypes.Key
+	endpointAddr string
+	port         int
+	keepalive    time.Duration
+	ips          []string
+	routes       []string
+
+	ll log.FieldLogger
 
 	labelSelector string
 
 	peerTracker *peerTracker
 
-	iface    string
-	wgClient *wgctrl.Client
+	iface         string
+	wgClient      *wgctrl.Client
+	kubeNamespace string
 
 	minKeepAlive time.Duration
 }
 
 // Run ...
-func Run(ll log.FieldLogger, endpointName string, bindAddr string, port uint16, keepalive time.Duration, kubeCS *kubernetes.Clientset, wgmeshCS *wgmeshClientSet.Clientset) error {
+func Run(ctx context.Context, ll log.FieldLogger, iface, name, endpointAddr string, port uint16, keepalive time.Duration, kubeCS *kubernetes.Clientset, wgmeshCS *wgmeshClientSet.Clientset, kubeNamespace string) error {
 	// TODO - Step 0 - Validate K8s permissions w/ CanI
 
 	// Step 1 - Configure wireguard
@@ -59,63 +64,67 @@ func Run(ll log.FieldLogger, endpointName string, bindAddr string, port uint16, 
 	}
 
 	a := &agent{
-		name:       endpointName,
-		privateKey: privateKey,
-		publicKey:  privateKey.PublicKey(),
-		psk:        psk,
-		endpoint:   bindAddr,
-		port:       int(port),
-		keepalive:  keepalive,
+		name:          name,
+		privateKey:    privateKey,
+		publicKey:     privateKey.PublicKey(),
+		psk:           psk,
+		endpointAddr:  endpointAddr,
+		port:          int(port),
+		keepalive:     keepalive,
+		iface:         iface,
+		kubeNamespace: kubeNamespace,
+		ll:            log.WithContext(ctx),
 	}
 
-	wgClient, err := a.initializeWireguard()
+	a.wgClient, err = a.initializeWireguard()
 	if err != nil {
 		return err
 	}
-	defer wgClient.Close()
+	//defer wgClient.Close()
 
 	// Step 2 - Install our Kubernetes WireGuardPeer resource on to the server.
-	thisPeer := &wgk8s.WireGuardPeer{
+	localPeer := &wgk8s.WireGuardPeer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: endpointName,
+			Name: name,
 		},
 	}
-	a.updatek8sLocalPeer(thisPeer)
-	thisPeer, err = wgmeshCS.WgmeshV1alpha1().WireGuardPeers("").Create(thisPeer)
+	a.updatek8sLocalPeer(localPeer)
+	localPeer, err = wgmeshCS.WgmeshV1alpha1().WireGuardPeers(a.kubeNamespace).Create(localPeer)
 	switch {
 	case k8sErrors.IsAlreadyExists(err):
-		thisPeer, err = wgmeshCS.WgmeshV1alpha1().WireGuardPeers("").Get(a.name, metav1.GetOptions{})
+		localPeer, err = wgmeshCS.WgmeshV1alpha1().WireGuardPeers(a.kubeNamespace).Get(a.name, metav1.GetOptions{})
 		if err != nil {
-			return fmt.Errorf("fetching existing k8s WireGuardPeer object %q: %w", endpointName, err)
+			return fmt.Errorf("fetching existing k8s WireGuardPeer object %q: %w", a.name, err)
 		}
-		if a.endpoint != thisPeer.Spec.Endpoint {
+		if a.endpointAddr != localPeer.Spec.Endpoint {
 			// This may mean two peers are trying to use the same name, which
 			// would result flapping and constant rekeying.
 			return fmt.Errorf(
 				"existing k8s WireGuardPeer had endpoint %q, we have %q. Two or more peers may be sharing the same name",
-				thisPeer.Spec.Endpoint, a.endpoint)
+				localPeer.Spec.Endpoint, a.endpointAddr)
 		}
-		a.ips = thisPeer.Spec.IPs
-		a.updatek8sLocalPeer(thisPeer)
-		thisPeer, err = wgmeshCS.WgmeshV1alpha1().WireGuardPeers("").Update(thisPeer)
+		a.ips = localPeer.Spec.IPs
+		a.updatek8sLocalPeer(localPeer)
+		localPeer, err = wgmeshCS.WgmeshV1alpha1().WireGuardPeers(a.kubeNamespace).Update(localPeer)
 		if err != nil {
-			return fmt.Errorf("updating k8s WireGuardPeer %q: %w", endpointName, err)
+			return fmt.Errorf("updating k8s WireGuardPeer %q: %w", a.name, err)
 		}
 	case err == nil:
 		// success
 	default:
-		return fmt.Errorf("creating k8s WireGuardPeer object %q: %w", endpointName, err)
+		return fmt.Errorf("creating k8s WireGuardPeer object %q: %w", a.name, err)
 	}
 
+	a.configureWireGuardPeers(ctx, wgmeshCS, localPeer)
+	<-ctx.Done()
 	return nil
 }
 
 // updateK8sLocalPeer populates the Kubernetes WireGuardPeer object.
-func (a *agent) updatek8sLocalPeer(thisPeer *wgk8s.WireGuardPeer) {
-	thisPeer.Spec = wgk8s.WireGuardPeerSpec{
+func (a *agent) updatek8sLocalPeer(localPeer *wgk8s.WireGuardPeer) {
+	localPeer.Spec = wgk8s.WireGuardPeerSpec{
 		PublicKey:        a.publicKey.String(),
-		Endpoint:         a.endpoint,
-		Port:             uint16(a.port),
+		Endpoint:         a.endpointAddr,
 		PresharedKey:     a.psk.String(),
 		IPs:              a.ips,
 		Routes:           a.routes,
@@ -138,6 +147,19 @@ func (a *agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 	if err != nil {
 		return // named args to facilitate cleanup.
 	}
+
+	device, err := wgClient.Device(a.iface)
+	if err != nil {
+		return // named args to facilitate cleanup.
+	}
+	existingPort := device.ListenPort
+	if a.port == 0 {
+		a.port = existingPort
+	}
+	if a.port != existingPort {
+		return nil, fmt.Errorf("existing interface bound to different port")
+	}
+
 	err = wgClient.ConfigureDevice(a.iface, wgtypes.Config{
 		PrivateKey: &a.privateKey,
 		ListenPort: &a.port,
@@ -145,10 +167,28 @@ func (a *agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 	if err != nil {
 		return
 	}
+	err = interfaces.SetInterfaceUp(a.iface)
+	if err != nil {
+		return // named args to facilitate cleanup.
+	}
+	device, err = wgClient.Device(a.iface)
+	if err != nil {
+		return // named args to facilitate cleanup.
+	}
+	a.port = device.ListenPort
+	endpointAddr, endpointPort, err := net.SplitHostPort(a.endpointAddr)
+	if err != nil {
+		return // named args to facilitate cleanup.
+	}
+	if endpointPort == "" || endpointPort == "0" {
+		// The endpointAddr didn't specifiy a port, use the dynamic port from the wg interface.
+		a.endpointAddr = net.JoinHostPort(endpointAddr, strconv.FormatInt(int64(a.port), 10))
+	}
+
 	return wgClient, nil
 }
 
-func (a *agent) configureWireGuardPeers(ctx context.Context, wgClient *wgctrl.Client, wgmeshCS *wgmeshClientSet.Clientset) error {
+func (a *agent) configureWireGuardPeers(ctx context.Context, wgmeshCS *wgmeshClientSet.Clientset, localPeer *wgk8s.WireGuardPeer) error {
 	var err error
 	labelSelector := labels.Everything()
 
@@ -160,15 +200,21 @@ func (a *agent) configureWireGuardPeers(ctx context.Context, wgClient *wgctrl.Cl
 	}
 
 	factory := wgInformer.NewSharedInformerFactoryWithOptions(
-		wgmeshCS, 0, wgInformer.WithTweakListOptions(func(listOptions *metav1.ListOptions) {
+		wgmeshCS, 0,
+		wgInformer.WithTweakListOptions(func(listOptions *metav1.ListOptions) {
 			listOptions.LabelSelector = labelSelector.String()
-		}))
+		}),
+		wgInformer.WithNamespace(a.kubeNamespace))
 
 	informer := factory.Wgmesh().V1alpha1().WireGuardPeers().Informer()
 
 	a.peerTracker = &peerTracker{
 		keepalive: a.keepalive,
-		wgClient:  wgClient,
+		wgClient:  a.wgClient,
+		ll:        a.ll,
+		iface:     a.iface,
+		peers:     make(map[string]*wgk8s.WireGuardPeer),
+		localPeer: localPeer,
 	}
 
 	informer.AddEventHandler(a.peerTracker)

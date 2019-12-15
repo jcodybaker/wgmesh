@@ -56,3 +56,13 @@ func (w *wgLink) Attrs() *netlink.LinkAttrs {
 	attr.Name = w.name
 	return &attr
 }
+
+// SetInterfaceUp sets the interface up.
+func SetInterfaceUp(iface string) error {
+	link := &wgLink{name: iface}
+	err := netlink.LinkSetUp(link)
+	if err != nil {
+		return fmt.Errorf("setting link %q up: %w", iface, err)
+	}
+	return nil
+}

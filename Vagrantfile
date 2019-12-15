@@ -14,7 +14,10 @@ Vagrant.configure("2") do |config|
     apt-get update
     apt-get install -y wireguard build-essential docker
     GO_VERSION=$(grep -E 'GO_VERSION :=' /go/src/github.com/jcodybaker/wgmesh/Makefile | cut -d' ' -f 3)
+    KUBERNETES_VERSION=$(grep -E 'KUBERNETES_VERSION :=' /go/src/github.com/jcodybaker/wgmesh/Makefile | cut -d' ' -f 3)
     curl -fs https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -xzf - -C /usr/local
+    curl -Lo /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.16.1/bin/linux/amd64/kubectl
+    chmod +x /usr/local/bin/kubectl
     echo 'PATH=$PATH:/usr/local/go/bin' | tee -a /root/.profile | tee -a ~vagrant/.profile
     echo 'GOPATH=/go' | tee -a /root/.profile | tee -a ~vagrant/.profile
     echo 'source ~/.profile' > ~vagrant/.bash_profile

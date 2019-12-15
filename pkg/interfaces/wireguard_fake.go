@@ -15,3 +15,8 @@ import (
 func EnsureWireguardInterface(wgClient *wgctrl.Client, iface string) error {
 	return errors.New("wireguard.EnsureWireguardInterface is unimplemented")
 }
+
+// SetInterfaceUp sets the interface up.
+func SetInterfaceUp(iface string) error {
+	return errors.New("wireguard.SetInterfaceUp is unimplemented")
+}
