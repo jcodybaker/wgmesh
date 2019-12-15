@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -21,9 +20,14 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/Showmax/go-fqdn"
-
 	"github.com/mattn/go-isatty"
+	"github.com/spf13/cobra"
 )
+
+var name, endpointAddr, iface, kubeNamespace, kubeconfig string
+var port uint16
+var keepAliveSeconds uint
+var debug bool
 
 func init() {
 	log.SetFormatter(&log.JSONFormatter{})
@@ -31,26 +35,30 @@ func init() {
 }
 
 func main() {
-	var kubeconfig *string
-	if home := homeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-
 	var hostname string
 	hostname, _ = os.Hostname()
-	name := flag.String("name", hostname, "name of the endpoint (default hostname)")
-	endpointAddr := flag.String("endpoint-addr", fqdn.Get(), "endpoint address used by peers (default fqdn)")
-	port := flag.Uint("port", 0, "port to bind the wireguard service. 0 = random available port")
-	keepaliveSeconds := flag.Int("keepalive-seconds", 0, "send keepalive packets every x seconds")
-	iface := flag.String("interface", "wg0", "network interface name for the wiregard interface")
-	debug := flag.Bool("debug", false, "debug logging")
-	kubeNamespace := flag.String("kube-namespace", "", "kubernetes namespace, default current")
 
-	flag.Parse()
+	var rootCmd = &cobra.Command{}
+	if home := homeDir(); home != "" {
+		rootCmd.Flags().StringVar(&kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		rootCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+	rootCmd.Flags().StringVar(&name, "name", hostname, "name of the endpoint (default hostname)")
+	rootCmd.Flags().StringVar(&endpointAddr, "endpoint-addr", fqdn.Get(), "endpoint address used by peers (default fqdn)")
+	rootCmd.Flags().Uint16Var(&port, "port", 0, "port to bind the wireguard service. 0 = random available port")
+	rootCmd.Flags().UintVar(&keepAliveSeconds, "keepalive-seconds", 0, "send keepalive packets every x seconds")
+	rootCmd.Flags().StringVar(&iface, "interface", "wg0", "network interface name for the wiregard interface")
+	rootCmd.Flags().BoolVar(&debug, "debug", false, "debug logging")
+	// TODO - figure out how to default this to the namespace specified in the kubeconfig file.
+	rootCmd.Flags().StringVar(&kubeNamespace, "kube-namespace", "", "kubernetes namespace")
+	rootCmd.Run = runAgent
+	rootCmd.Execute()
+}
 
-	if debug != nil && *debug {
+func runAgent(cmd *cobra.Command, args []string) {
+
+	if debug {
 		log.SetLevel(log.DebugLevel)
 	}
 	if isatty.IsTerminal(os.Stdout.Fd()) {
@@ -61,16 +69,15 @@ func main() {
 	ll := log.WithContext(ctx)
 
 	validateNodeName(name)
-	validateEndpointAddr(*endpointAddr)
-	validatePort(*port)
+	validateEndpointAddr(endpointAddr)
 
 	var keepalive time.Duration
-	if keepaliveSeconds != nil {
-		keepalive = time.Duration(*keepaliveSeconds) * time.Second
+	if keepAliveSeconds > 0 {
+		keepalive = time.Duration(keepAliveSeconds) * time.Second
 	}
 
 	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -86,7 +93,7 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = agent.Run(ctx, ll, *iface, *name, *endpointAddr, uint16(*port), keepalive, kubeClientset, wgmeshClientset, *kubeNamespace)
+	err = agent.Run(ctx, ll, iface, name, endpointAddr, port, keepalive, kubeClientset, wgmeshClientset, kubeNamespace)
 	if err != nil {
 		panic(err)
 	}
@@ -99,24 +106,17 @@ func homeDir() string {
 	return os.Getenv("USERPROFILE") // windows
 }
 
-func validateNodeName(endpointName *string) {
-	if endpointName == nil {
-		fmt.Fprintln(os.Stderr, "--endpoint-name: was nil")
+func validateNodeName(endpointName string) {
+	if endpointName == "" {
+		fmt.Fprintln(os.Stderr, "--endpoint-name: was empty")
 		os.Exit(1)
 	}
-	errs := validation.IsDNS1123Subdomain(*endpointName)
+	errs := validation.IsDNS1123Subdomain(endpointName)
 	if len(errs) == 0 {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "--endpoint-name: %s\n", strings.Join(errs, " "))
 	os.Exit(1)
-}
-
-func validatePort(port uint) {
-	if port >= 0xFFFF {
-		fmt.Fprintln(os.Stderr, "--port: port must be between 0 and 65535")
-		os.Exit(1)
-	}
 }
 
 func validateEndpointAddr(endpointAddr string) {

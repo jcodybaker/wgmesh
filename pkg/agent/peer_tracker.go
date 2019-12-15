@@ -174,9 +174,14 @@ func (pt *peerTracker) k8sToWgctrl(wgPeer *wgk8s.WireGuardPeer) (config wgtypes.
 		return
 	}
 
+	// TODO(cbaker) - This doesn't seem to work.
 	config.Endpoint, err = net.ResolveUDPAddr("udp", wgPeer.Spec.Endpoint)
 	if err != nil {
 		err = fmt.Errorf("failed to resolve endpoint %q: %w", wgPeer.Spec.Endpoint, err)
+		return
+	}
+	if config.Endpoint.Port <= 0 || config.Endpoint.Port > 0xFFFF {
+		err = fmt.Errorf("remote endpoint had invalid port %d", config.Endpoint.Port)
 		return
 	}
 

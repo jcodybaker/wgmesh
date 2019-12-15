@@ -54,10 +54,12 @@ func Run(ctx context.Context, ll log.FieldLogger, iface, name, endpointAddr stri
 	// TODO - Step 0 - Validate K8s permissions w/ CanI
 
 	// Step 1 - Configure wireguard
+	ll.Debugln("generating private key")
 	privateKey, err := wgtypes.GeneratePrivateKey()
 	if err != nil {
 		return fmt.Errorf("generating wireguard private key: %w", err)
 	}
+	ll.Debugln("generating pre-shared key")
 	psk, err := wgtypes.GenerateKey()
 	if err != nil {
 		return fmt.Errorf("generating wireguard pre-shared key: %w", err)
@@ -133,21 +135,26 @@ func (a *agent) updatek8sLocalPeer(localPeer *wgk8s.WireGuardPeer) {
 }
 
 func (a *agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
+	a.ll.Debugln("initializing wiregaurd client")
 	wgClient, err = wgctrl.New()
 	if err != nil {
 		return nil, fmt.Errorf("initializing wgctrl client: %w", err)
 	}
 	defer func() {
 		if err != nil && wgClient != nil {
+			a.ll.Infoln("closing wireguard client")
 			wgClient.Close()
 			wgClient = nil
 		}
 	}()
+	ll := a.ll.WithField("interface", a.iface)
+	ll.Infoln("creating wireguard interface")
 	err = interfaces.EnsureWireguardInterface(wgClient, a.iface)
 	if err != nil {
 		return // named args to facilitate cleanup.
 	}
 
+	ll.Debugln("loading up wireguard device")
 	device, err := wgClient.Device(a.iface)
 	if err != nil {
 		return // named args to facilitate cleanup.
@@ -160,6 +167,7 @@ func (a *agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 		return nil, fmt.Errorf("existing interface bound to different port")
 	}
 
+	ll.Infoln("configuring key and port on wireguard interface")
 	err = wgClient.ConfigureDevice(a.iface, wgtypes.Config{
 		PrivateKey: &a.privateKey,
 		ListenPort: &a.port,
@@ -167,6 +175,8 @@ func (a *agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 	if err != nil {
 		return
 	}
+
+	ll.Debugln("setting device state up")
 	err = interfaces.SetInterfaceUp(a.iface)
 	if err != nil {
 		return // named args to facilitate cleanup.
@@ -183,6 +193,8 @@ func (a *agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 	if endpointPort == "" || endpointPort == "0" {
 		// The endpointAddr didn't specifiy a port, use the dynamic port from the wg interface.
 		a.endpointAddr = net.JoinHostPort(endpointAddr, strconv.FormatInt(int64(a.port), 10))
+		// TODO - Do we actually want to do this? If we're behind NAT it may mean nothing.
+		ll.Debugln("adding port to endpoint")
 	}
 
 	return wgClient, nil
@@ -190,6 +202,7 @@ func (a *agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 
 func (a *agent) configureWireGuardPeers(ctx context.Context, wgmeshCS *wgmeshClientSet.Clientset, localPeer *wgk8s.WireGuardPeer) error {
 	var err error
+	a.ll.Infoln("initializing WireGuardPeers from api")
 	labelSelector := labels.Everything()
 
 	if a.labelSelector != "" {
@@ -199,6 +212,11 @@ func (a *agent) configureWireGuardPeers(ctx context.Context, wgmeshCS *wgmeshCli
 		}
 	}
 
+	ll := a.ll.WithFields(log.Fields{
+		"namespace": a.kubeNamespace,
+		"labels":    labelSelector.String(),
+	})
+	ll.Debugln("building informer")
 	factory := wgInformer.NewSharedInformerFactoryWithOptions(
 		wgmeshCS, 0,
 		wgInformer.WithTweakListOptions(func(listOptions *metav1.ListOptions) {
@@ -219,10 +237,12 @@ func (a *agent) configureWireGuardPeers(ctx context.Context, wgmeshCS *wgmeshCli
 
 	informer.AddEventHandler(a.peerTracker)
 
+	ll.Infoln("launching informer")
 	go informer.Run(ctx.Done())
 	if !cache.WaitForCacheSync(ctx.Done(), informer.HasSynced) {
 		return fmt.Errorf("failed to sync WireGuardPeers")
 	}
+	ll.Infoln("cache fully synced; applying initial config to interface")
 	// Ok, everything should be sync'ed now.
 	return a.peerTracker.applyInitialConfig()
 }
