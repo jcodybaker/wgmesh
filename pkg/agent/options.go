@@ -28,6 +28,8 @@ type options struct {
 	ips          []string
 	offerRoutes  []string
 
+	kubeNode string
+
 	peerSelector labels.Selector
 	labels       labels.Set
 }
@@ -68,11 +70,22 @@ func WithLocalKubeClientConfig(config clientcmd.ClientConfig) OptionFunc {
 func WithRegistryKubeClientConfig(config clientcmd.ClientConfig) OptionFunc {
 	return func(o *options) error {
 		o.registryKubeClientConfig = config
+		if o.registryNamespace != "" {
+			return nil
+		}
 		ns, _, err := config.Namespace()
 		if err != nil {
 			return fmt.Errorf("looking up namespace for local kubeconfig: %w", err)
 		}
 		o.registryNamespace = ns
+		return nil
+	}
+}
+
+// WithRegistryNamespace sets the namespace for the registry.
+func WithRegistryNamespace(registryNamespace string) OptionFunc {
+	return func(o *options) error {
+		o.registryNamespace = registryNamespace
 		return nil
 	}
 }
@@ -124,6 +137,30 @@ func WithPeerSelector(peerSelector labels.Selector) OptionFunc {
 func WithLabels(labels labels.Set) OptionFunc {
 	return func(o *options) error {
 		o.labels = labels
+		return nil
+	}
+}
+
+// WithKubeNode sets the name of this kubernetes node.
+func WithKubeNode(kubeNode string) OptionFunc {
+	return func(o *options) error {
+		o.kubeNode = kubeNode
+		return nil
+	}
+}
+
+// WithPort specifies the port wireguard should listen on.
+func WithPort(port uint16) OptionFunc {
+	return func(o *options) error {
+		o.port = int(port)
+		return nil
+	}
+}
+
+// WithEndpointAddr ...
+func WithEndpointAddr(endpointAddr string) OptionFunc {
+	return func(o *options) error {
+		o.endpointAddr = endpointAddr
 		return nil
 	}
 }
