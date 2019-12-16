@@ -24,7 +24,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var name, endpointAddr, iface, kubeNamespace, kubeconfig string
+var name, endpointAddr, iface, registryNamespace, kubeNode, kubeconfig string
+var ips, offerRoutes []string
 var port uint16
 var keepAliveSeconds uint
 var debug bool
@@ -51,7 +52,10 @@ func main() {
 	rootCmd.Flags().StringVar(&iface, "interface", "wg0", "network interface name for the wiregard interface")
 	rootCmd.Flags().BoolVar(&debug, "debug", false, "debug logging")
 	// TODO - figure out how to default this to the namespace specified in the kubeconfig file.
-	rootCmd.Flags().StringVar(&kubeNamespace, "kube-namespace", "", "kubernetes namespace")
+	rootCmd.Flags().StringVar(&registryNamespace, "kube-namespace", "", "kubernetes namespace")
+	rootCmd.Flags().StringVar(&kubeNode, "kubeNode", "", "specify the Kubernetes node name (optional)")
+	rootCmd.Flags().StringSliceVar(&ips, "ips", nil, "ip addresses which should be assigned to the local wireguard interface")
+	rootCmd.Flags().StringSliceVar(&offerRoutes, "offer-routes", nil, "routes which this node will offer to peers")
 	rootCmd.Run = runAgent
 	rootCmd.Execute()
 }
@@ -76,24 +80,37 @@ func runAgent(cmd *cobra.Command, args []string) {
 		keepalive = time.Duration(keepAliveSeconds) * time.Second
 	}
 
+
+	// if a.labelSelector != "" {
+	// 	labelSelector, err = labels.Parse(a.labelSelector)
+	// 	if err != nil {
+	// 		return fmt.Errorf("failed to parse label selector: %w", labelSelector)
+	// 	}
+	// }
+
+
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	overrides := &clientcmd.ConfigOverrides{}
+
+	if kubeconfig != "" {
+		rules.ExplicitPath = kubeconfig
+	}
+
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides).ClientConfig()
+	if err != nil {
+		glog.Fatalf("Couldn't get Kubernetes default config: %s", err)
+	}
+
+
 	// use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	// create the clientset
-	kubeClientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
-	}
 
-	wgmeshClientset, err := versioned.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
-	}
 
-	err = agent.Run(ctx, ll, iface, name, endpointAddr, port, keepalive, kubeClientset, wgmeshClientset, kubeNamespace)
+	err = agent.Run(ctx, ll, iface, name, endpointAddr, port, keepalive, kubeClientset, wgmeshClientset, registryNamespace)
 	if err != nil {
 		panic(err)
 	}
@@ -124,6 +141,30 @@ func validateEndpointAddr(endpointAddr string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "--endpoint-addr: invalid: %v", err)
 		os.Exit(1)
+	}
+}
+
+func validateIPs(ips []string) {
+	for _, ip := range ips {
+		if strings.Index(ip, "/") == -1 {
+			fmt.Fprintf(os.Stderr, "--ips: %q missing prefix length", ip)
+			os.Exit(1)
+		}
+		_, _, err := net.ParseCIDR(ip)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "--ips: invalid ip %q: %v", ip, err)
+			os.Exit(1)
+		}
+	}
+}
+
+func validateOfferRoutes(offerRoutes []string) {
+	for _, route := range offerRoutes {
+		_, _, err := net.ParseCIDR(route)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "--offer-routes: invalid CIDR %q: %v", route, err)
+			os.Exit(1)
+		}
 	}
 }
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"time"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/tools/cache"
@@ -19,122 +19,173 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"k8s.io/apimachinery/pkg/labels"
-
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-type agent struct {
-	name         string
-	privateKey   wgtypes.Key
-	publicKey    wgtypes.Key
-	psk          wgtypes.Key
-	endpointAddr string
-	port         int
-	keepalive    time.Duration
-	ips          []string
-	routes       []string
+// Agent creates a wireguard interface, advertises it in the registry, and
+// manages relationships with its peers.
+type Agent struct {
+	options
 
-	ll log.FieldLogger
+	localCS      *kubernetes.Clientset
+	regClientset *wgmeshClientSet.Clientset
 
-	labelSelector string
+	initOnce sync.Once
+	wg       sync.WaitGroup
 
+	localPeer *wgk8s.WireGuardPeer
+
+	wgClient    *wgctrl.Client
+	privateKey  wgtypes.Key
+	publicKey   wgtypes.Key
+	psk         wgtypes.Key
 	peerTracker *peerTracker
-
-	iface         string
-	wgClient      *wgctrl.Client
-	kubeNamespace string
-
-	minKeepAlive time.Duration
 }
 
-// Run ...
-func Run(ctx context.Context, ll log.FieldLogger, iface, name, endpointAddr string, port uint16, keepalive time.Duration, kubeCS *kubernetes.Clientset, wgmeshCS *wgmeshClientSet.Clientset, kubeNamespace string) error {
-	// TODO - Step 0 - Validate K8s permissions w/ CanI
+// NewAgent creates an agent to manage a local wireguard peer.
+func NewAgent(name string, optionFuncs ...OptionFunc) (*Agent, error) {
+	a := &Agent{
+		options: defaultOptions(),
+	}
+	a.name = name
+	for _, f := range optionFuncs {
+		err := f(&a.options)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return a, nil
+}
+
+func (a *Agent) init(ctx context.Context) error {
+	// setup the clientsets
+	if a.localKubeClientConfig != nil {
+		a.ll.Debugf("building local kubernetes clientset")
+		// local kubeconfig is optional. Without it, we can't get insight into this node/pod
+		// but all of those values can be manually specified.
+		localConfig, err := a.localKubeClientConfig.ClientConfig()
+		if err != nil {
+			return fmt.Errorf("building restconfig from local kubeconfig: %w", err)
+		}
+		a.localCS, err = kubernetes.NewForConfig(localConfig)
+		if err != nil {
+			return fmt.Errorf("building local clientset: %w", err)
+		}
+	} else {
+		a.ll.Debugf("skipping local kubernetes client, no kubeconfig specified")
+	}
+
+	a.ll.Debugf("building registry kubernetes clientset")
+	registryConfig, err := a.registryKubeClientConfig.ClientConfig()
+	if err != nil {
+		return fmt.Errorf("building restconfig from registry kubeconfig: %w", err)
+	}
+	a.regClientset, err = wgmeshClientSet.NewForConfig(registryConfig)
+	if err != nil {
+		return fmt.Errorf("building registry wgmesh clientset: %w", err)
+	}
 
 	// Step 1 - Configure wireguard
-	ll.Debugln("generating private key")
-	privateKey, err := wgtypes.GeneratePrivateKey()
+	a.ll.Debugln("generating private key")
+	a.privateKey, err = wgtypes.GeneratePrivateKey()
 	if err != nil {
 		return fmt.Errorf("generating wireguard private key: %w", err)
 	}
-	ll.Debugln("generating pre-shared key")
-	psk, err := wgtypes.GenerateKey()
+	a.ll.Debugln("generating pre-shared key")
+	a.psk, err = wgtypes.GenerateKey()
 	if err != nil {
 		return fmt.Errorf("generating wireguard pre-shared key: %w", err)
 	}
 
-	a := &agent{
-		name:          name,
-		privateKey:    privateKey,
-		publicKey:     privateKey.PublicKey(),
-		psk:           psk,
-		endpointAddr:  endpointAddr,
-		port:          int(port),
-		keepalive:     keepalive,
-		iface:         iface,
-		kubeNamespace: kubeNamespace,
-		ll:            log.WithContext(ctx),
+	// TODO - Validate K8s permissions w/ CanI
+	return nil
+}
+
+// Run ...
+func (a *Agent) Run(ctx context.Context) error {
+	var err error
+	a.initOnce.Do(func() {
+		err = a.init(ctx)
+	})
+	if err != nil {
+		return err
 	}
 
 	a.wgClient, err = a.initializeWireguard()
 	if err != nil {
 		return err
 	}
-	//defer wgClient.Close()
+	defer a.wgClient.Close()
+	// We don't want to close the wgClient before all of the goroutines which may depend
+	// on it are finished, so we put the waitgroup at the top of the stack.
+	defer a.wg.Wait()
 
 	// Step 2 - Install our Kubernetes WireGuardPeer resource on to the server.
-	localPeer := &wgk8s.WireGuardPeer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
+	a.updateK8sLocalPeer()
+	err = a.registerK8sLocalPeer()
+	if err != nil {
+		return err
 	}
-	a.updatek8sLocalPeer(localPeer)
-	localPeer, err = wgmeshCS.WgmeshV1alpha1().WireGuardPeers(a.kubeNamespace).Create(localPeer)
-	switch {
-	case k8sErrors.IsAlreadyExists(err):
-		localPeer, err = wgmeshCS.WgmeshV1alpha1().WireGuardPeers(a.kubeNamespace).Get(a.name, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("fetching existing k8s WireGuardPeer object %q: %w", a.name, err)
-		}
-		if a.endpointAddr != localPeer.Spec.Endpoint {
-			// This may mean two peers are trying to use the same name, which
-			// would result flapping and constant rekeying.
-			return fmt.Errorf(
-				"existing k8s WireGuardPeer had endpoint %q, we have %q. Two or more peers may be sharing the same name",
-				localPeer.Spec.Endpoint, a.endpointAddr)
-		}
-		a.ips = localPeer.Spec.IPs
-		a.updatek8sLocalPeer(localPeer)
-		localPeer, err = wgmeshCS.WgmeshV1alpha1().WireGuardPeers(a.kubeNamespace).Update(localPeer)
-		if err != nil {
-			return fmt.Errorf("updating k8s WireGuardPeer %q: %w", a.name, err)
-		}
-	case err == nil:
-		// success
-	default:
-		return fmt.Errorf("creating k8s WireGuardPeer object %q: %w", a.name, err)
-	}
-
-	a.configureWireGuardPeers(ctx, wgmeshCS, localPeer)
+	a.configureWireGuardPeers(ctx)
 	<-ctx.Done()
 	return nil
 }
 
 // updateK8sLocalPeer populates the Kubernetes WireGuardPeer object.
-func (a *agent) updatek8sLocalPeer(localPeer *wgk8s.WireGuardPeer) {
-	localPeer.Spec = wgk8s.WireGuardPeerSpec{
+func (a *Agent) updateK8sLocalPeer() {
+	if a.localPeer == nil {
+		a.localPeer = &wgk8s.WireGuardPeer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   a.name,
+				Labels: a.labels,
+			},
+		}
+	}
+	a.localPeer.Spec = wgk8s.WireGuardPeerSpec{
 		PublicKey:        a.publicKey.String(),
 		Endpoint:         a.endpointAddr,
 		PresharedKey:     a.psk.String(),
 		IPs:              a.ips,
-		Routes:           a.routes,
+		Routes:           a.offerRoutes,
 		KeepAliveSeconds: int(a.keepalive.Seconds()),
 	}
 }
 
-func (a *agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
+func (a *Agent) registerK8sLocalPeer() error {
+	a.ll.Infoln("registering local peer")
+	var err error
+	a.localPeer, err = a.regClientset.WgmeshV1alpha1().WireGuardPeers(a.registryNamespace).Create(a.localPeer)
+	if err == nil {
+		return nil
+	}
+	if !k8sErrors.IsAlreadyExists(err) {
+		return fmt.Errorf("creating k8s WireGuardPeer object %q: %w", a.name, err)
+	}
+
+	// The record already exists. Determine if its sane, and updates.
+	a.ll.Infoln("a local peer wih our name was already registered, trying to update")
+	a.localPeer, err = a.regClientset.WgmeshV1alpha1().WireGuardPeers(a.registryNamespace).Get(a.name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("fetching existing k8s WireGuardPeer object %q: %w", a.name, err)
+	}
+	if a.endpointAddr != a.localPeer.Spec.Endpoint {
+		// This may mean two peers are trying to use the same name, which
+		// would result flapping and constant rekeying.
+		return fmt.Errorf(
+			"existing k8s WireGuardPeer had endpoint %q, we have %q. Two or more peers may be sharing the same name",
+			a.localPeer.Spec.Endpoint, a.endpointAddr)
+	}
+	// TODO: If our wg interface is configured w/ a private key and the public key matches the
+	// record, we shouldn't rekey.
+	a.localPeer, err = a.regClientset.WgmeshV1alpha1().WireGuardPeers(a.registryNamespace).Update(a.localPeer)
+	if err != nil {
+		return fmt.Errorf("updating k8s WireGuardPeer %q: %w", a.name, err)
+	}
+	return nil
+}
+
+func (a *Agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 	a.ll.Debugln("initializing wiregaurd client")
 	wgClient, err = wgctrl.New()
 	if err != nil {
@@ -200,29 +251,20 @@ func (a *agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 	return wgClient, nil
 }
 
-func (a *agent) configureWireGuardPeers(ctx context.Context, wgmeshCS *wgmeshClientSet.Clientset, localPeer *wgk8s.WireGuardPeer) error {
-	var err error
+func (a *Agent) configureWireGuardPeers(ctx context.Context) error {
 	a.ll.Infoln("initializing WireGuardPeers from api")
-	labelSelector := labels.Everything()
-
-	if a.labelSelector != "" {
-		labelSelector, err = labels.Parse(a.labelSelector)
-		if err != nil {
-			return fmt.Errorf("failed to parse label selector: %w", labelSelector)
-		}
-	}
 
 	ll := a.ll.WithFields(log.Fields{
-		"namespace": a.kubeNamespace,
-		"labels":    labelSelector.String(),
+		"namespace": a.registryNamespace,
+		"labels":    a.peerSelector.String(),
 	})
 	ll.Debugln("building informer")
 	factory := wgInformer.NewSharedInformerFactoryWithOptions(
-		wgmeshCS, 0,
+		a.regClientset, 0,
 		wgInformer.WithTweakListOptions(func(listOptions *metav1.ListOptions) {
-			listOptions.LabelSelector = labelSelector.String()
+			listOptions.LabelSelector = a.peerSelector.String()
 		}),
-		wgInformer.WithNamespace(a.kubeNamespace))
+		wgInformer.WithNamespace(a.registryNamespace))
 
 	informer := factory.Wgmesh().V1alpha1().WireGuardPeers().Informer()
 
@@ -232,13 +274,18 @@ func (a *agent) configureWireGuardPeers(ctx context.Context, wgmeshCS *wgmeshCli
 		ll:        a.ll,
 		iface:     a.iface,
 		peers:     make(map[string]*wgk8s.WireGuardPeer),
-		localPeer: localPeer,
+		localPeer: a.localPeer,
 	}
 
 	informer.AddEventHandler(a.peerTracker)
 
 	ll.Infoln("launching informer")
-	go informer.Run(ctx.Done())
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		informer.Run(ctx.Done())
+	}()
+
 	if !cache.WaitForCacheSync(ctx.Done(), informer.HasSynced) {
 		return fmt.Errorf("failed to sync WireGuardPeers")
 	}

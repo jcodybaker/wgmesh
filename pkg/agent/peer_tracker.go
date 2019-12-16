@@ -87,7 +87,7 @@ func (pt *peerTracker) applyInitialConfig() error {
 				"k8s_namespace": wgPeer.Namespace,
 				"k8s_kind":      wgPeer.Kind,
 				"k8s_name":      wgPeer.Name,
-			}).WithError(err).Error("failed to build control peer")
+			}).WithError(err).Warn("failed to build control peer")
 			continue
 		}
 		config.Peers = append(config.Peers, peer)
@@ -174,14 +174,9 @@ func (pt *peerTracker) k8sToWgctrl(wgPeer *wgk8s.WireGuardPeer) (config wgtypes.
 		return
 	}
 
-	// TODO(cbaker) - This doesn't seem to work.
 	config.Endpoint, err = net.ResolveUDPAddr("udp", wgPeer.Spec.Endpoint)
 	if err != nil {
 		err = fmt.Errorf("failed to resolve endpoint %q: %w", wgPeer.Spec.Endpoint, err)
-		return
-	}
-	if config.Endpoint.Port <= 0 || config.Endpoint.Port > 0xFFFF {
-		err = fmt.Errorf("remote endpoint had invalid port %d", config.Endpoint.Port)
 		return
 	}
 

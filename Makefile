@@ -6,7 +6,7 @@ image: dev
 
 dev:
 	docker build -t wgmesh-dev -f Dockerfile.dev \
-		--build-arg=GO_VERSION=docker.io/golang:$(GO_VERSION) \
+		--build-arg=GO_IMAGE=docker.io/golang:$(GO_VERSION)-buster \
 		--build-arg=KUBERNETES_GIT_TAG=kubernetes-$(KUBERNETES_VERSION) .
 
 generate-k8s:

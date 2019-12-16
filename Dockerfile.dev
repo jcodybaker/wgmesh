@@ -1,7 +1,7 @@
-ARG GO_VERSION=docker.io/golang
+ARG GO_IMAGE=docker.io/golang-buster
 ARG KUBERNETES_GIT_TAG=1.16.3
 
-FROM ${GO_VERSION}
+FROM ${GO_IMAGE}
 
 WORKDIR /go/src/github.com/jcodybaker/wgmesh
 

@@ -12,7 +12,8 @@ Vagrant.configure("2") do |config|
   config.vm.provision "shell", inline: <<-'SHELL'
     add-apt-repository ppa:wireguard/wireguard
     apt-get update
-    apt-get install -y wireguard build-essential docker
+    apt-get install -y wireguard build-essential docker.io
+    usermod -G docker vagrant
     GO_VERSION=$(grep -E 'GO_VERSION :=' /go/src/github.com/jcodybaker/wgmesh/Makefile | cut -d' ' -f 3)
     KUBERNETES_VERSION=$(grep -E 'KUBERNETES_VERSION :=' /go/src/github.com/jcodybaker/wgmesh/Makefile | cut -d' ' -f 3)
     curl -fs https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -xzf - -C /usr/local

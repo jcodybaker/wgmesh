@@ -16,7 +16,11 @@ spec:
     spec:
       containers:
       - command:
-        - /wgmesh
+        - /app/wgmesh
+        - --name=$(K8S_NODE_NAME)
+        - --kube-namespace=wg
+        - --debug
+        - --keepalive-seconds=25
         env:
         - name: K8S_NODE_NAME
           valueFrom:
@@ -30,15 +34,8 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
-            - SYS_MODULE
-          privileged: true
-        volumeMounts:
-        - mountPath: /lib/modules
-          name: lib-modules
-          readOnly: true
-      dnsPolicy: ClusterFirst
+      dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
-      initContainers:
       restartPolicy: Always
       securityContext: {}
       serviceAccount: wgmesh
@@ -46,12 +43,3 @@ spec:
       terminationGracePeriodSeconds: 1
       tolerations:
       - operator: Exists
-      volumes:
-      - hostPath:
-          path: /sys/fs/bpf
-          type: DirectoryOrCreate
-        name: bpf-maps
-      - hostPath:
-          path: /lib/modules
-          type: ""
-        name: lib-modules
