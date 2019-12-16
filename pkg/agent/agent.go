@@ -21,6 +21,8 @@ import (
 
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+
+	"github.com/vishvananda/netlink"
 )
 
 // Agent creates a wireguard interface, advertises it in the registry, and
@@ -215,7 +217,8 @@ func (a *Agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 		a.port = existingPort
 	}
 	if a.port != existingPort {
-		return nil, fmt.Errorf("existing interface bound to different port")
+		err = fmt.Errorf("existing interface bound to different port")
+		return
 	}
 
 	ll.Infoln("configuring key and port on wireguard interface")
@@ -225,6 +228,14 @@ func (a *Agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 	})
 	if err != nil {
 		return
+	}
+
+	for _, ip := range a.ips {
+		addr, err := netlink.ParseAddr(ip)
+		if err != nil {
+			return wgClient, err
+		}
+		err = interfaces.SetIP(a.iface, addr)
 	}
 
 	ll.Debugln("setting device state up")

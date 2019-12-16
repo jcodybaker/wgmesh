@@ -38,3 +38,12 @@ func GetLocalSourceIP(dest string) (string, error) {
 	}
 	return rs[0].Src.String(), nil
 }
+
+// SetIP adds the specified IPNet to the interface.
+func SetIP(iface string, ip *netlink.Addr) error {
+	link, err := netlink.LinkByName(iface)
+	if err != nil {
+		return fmt.Errorf("finding interface %q: %w", iface, err)
+	}
+	return netlink.AddrAdd(link, ip)
+}
