@@ -6,7 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/jcodybaker/wgmesh/pkg/log"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -31,11 +33,11 @@ var rootCmd = &cobra.Command{
 func init() {
 	viper.SetEnvPrefix("wgmesh")
 
-	log.SetFormatter(&log.JSONFormatter{})
-	log.SetLevel(log.InfoLevel)
+	logrus.SetFormatter(&log.JSONFormatter{})
+	logrus.SetLevel(log.InfoLevel)
 
-	ctx = signalContext(context.Background())
-	ll = log.WithContext(ctx)
+	ll = log.FromContext(ctx)
+	ctx = log.AddToContext(signalContext(context.Background()), ll)
 }
 
 func main() {

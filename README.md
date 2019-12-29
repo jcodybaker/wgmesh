@@ -1,6 +1,6 @@
 # WG Mesh
 
-WG Mesh facilitates building a secure overlay network using the Wireguard protocol and a Kubernetes API.
+WG Mesh facilitates building a secure overlay network using the WireGuard protocol and a Kubernetes API.
 
 ## Using
 

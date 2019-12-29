@@ -26,7 +26,7 @@ func testInNetworkNamespace(f func()) {
 	f()
 }
 
-func TestAddWireguardInterface(t *testing.T) {
+func TestAddWireGuardInterface(t *testing.T) {
 	testInNetworkNamespace(func() {
 		defer func() {
 			out, err := exec.Command("ip", "link", "delete", "wg0").CombinedOutput()
@@ -34,7 +34,7 @@ func TestAddWireguardInterface(t *testing.T) {
 				t.Logf("failed: ip link delete wg0: %s", string(out))
 			}
 		}()
-		addWireguardInterface("wg0")
+		addWireGuardInterface("wg0")
 		out, err := exec.Command("ip", "link", "show", "wg0").CombinedOutput()
 		require.NoErrorf(t, err, "failed: ip link get wg0: %s", string(out))
 		require.Contains(t)

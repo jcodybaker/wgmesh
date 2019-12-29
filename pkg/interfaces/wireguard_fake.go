@@ -3,20 +3,49 @@
 package interfaces
 
 import (
-	"errors"
+	"context"
+	"fmt"
+	"net"
+	"os/exec"
 
 	"golang.zx2c4.com/wireguard/wgctrl"
 )
 
-// This file facilitates development on non-linux platforms.
-
-// EnsureWireguardInterface verifies the specified interface exists and is of
-// the "wireguard" type.  If the interface does not exist, it will be created.
-func EnsureWireguardInterface(wgClient *wgctrl.Client, iface string) error {
-	return errors.New("wireguard.EnsureWireguardInterface is unimplemented")
+func createKernelInterface(wgClient *wgctrl.Client, iface string) (WireGuardInterface, error) {
+	return nil, fmt.Errorf("createKernelInterface: %w", errUnimplemented)
 }
 
-// SetInterfaceUp sets the interface up.
-func SetInterfaceUp(iface string) error {
-	return errors.New("wireguard.SetInterfaceUp is unimplemented")
+func startWGUserspaceInterface(
+	ctx context.Context,
+	wgClient *wgctrl.Client,
+	name string,
+	cmd *exec.Cmd,
+) (WireGuardInterface, error) {
+	return nil, fmt.Errorf("startWGUserspaceInterface: %w", errUnimplemented)
+}
+
+type fakeWGInterface struct{}
+
+func (*fakeWGInterface) EnsureUp() error {
+	return fmt.Errorf("WireGuardInterface.EnsureUp: %w", errUnimplemented)
+}
+
+func (*fakeWGInterface) EnsureIP(ip *net.IPNet) error {
+	return fmt.Errorf("WireGuardInterface.EnsureIP: %w", errUnimplemented)
+}
+
+func (*fakeWGInterface) Close() error {
+	return fmt.Errorf("WireGuardInterface.Close: %w", errUnimplemented)
+}
+
+func getAllInterfaces(desired string) (map[string]struct{}, error) {
+	return nil, fmt.Errorf("getAllInterfaces: %w", errUnimplemented)
+}
+
+func newWGInterface(wgClient *wgctrl.Client, name string) (WireGuardInterface, error) {
+	return nil, fmt.Errorf("newWGInterface: %w", errUnimplemented)
+}
+
+func createWGKernelInterface(wgClient *wgctrl.Client, options *WireGuardInterfaceOptions, name string) (WireGuardInterface, error) {
+	return nil, fmt.Errorf("createWGKernelInterface: %w", errUnimplemented)
 }

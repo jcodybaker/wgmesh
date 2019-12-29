@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/tools/cache"
 
 	wgmeshClientSet "github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/generated/clientset/versioned"
@@ -114,7 +114,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		return err
 	}
 
-	a.wgClient, err = a.initializeWireguard()
+	a.wgClient, err = a.initializeWireGuard()
 	if err != nil {
 		return err
 	}
@@ -187,8 +187,8 @@ func (a *Agent) registerK8sLocalPeer() error {
 	return nil
 }
 
-func (a *Agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
-	a.ll.Debugln("initializing wiregaurd client")
+func (a *Agent) initializeWireGuard() (wgClient *wgctrl.Client, err error) {
+	a.ll.Debugln("initializing wireguard client")
 	wgClient, err = wgctrl.New()
 	if err != nil {
 		return nil, fmt.Errorf("initializing wgctrl client: %w", err)
@@ -202,7 +202,7 @@ func (a *Agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 	}()
 	ll := a.ll.WithField("interface", a.iface)
 	ll.Infoln("creating wireguard interface")
-	err = interfaces.EnsureWireguardInterface(wgClient, a.iface)
+	err = interfaces.EnsureWireGuardInterface(wgClient, a.iface)
 	if err != nil {
 		return // named args to facilitate cleanup.
 	}
@@ -265,7 +265,7 @@ func (a *Agent) initializeWireguard() (wgClient *wgctrl.Client, err error) {
 func (a *Agent) configureWireGuardPeers(ctx context.Context) error {
 	a.ll.Infoln("initializing WireGuardPeers from api")
 
-	ll := a.ll.WithFields(log.Fields{
+	ll := a.ll.WithFields(logrus.Fields{
 		"namespace": a.registryNamespace,
 		"labels":    a.peerSelector.String(),
 	})
