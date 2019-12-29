@@ -17,15 +17,15 @@ import (
 
 var debug bool
 var ctx context.Context
-var ll log.FieldLogger
+var ll logrus.FieldLogger
 
 var rootCmd = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if debug {
-			log.SetLevel(log.DebugLevel)
+			logrus.SetLevel(logrus.DebugLevel)
 		}
 		if isatty.IsTerminal(os.Stdout.Fd()) {
-			log.SetFormatter(&log.TextFormatter{})
+			logrus.SetFormatter(&logrus.TextFormatter{})
 		}
 	},
 }
@@ -33,8 +33,8 @@ var rootCmd = &cobra.Command{
 func init() {
 	viper.SetEnvPrefix("wgmesh")
 
-	logrus.SetFormatter(&log.JSONFormatter{})
-	logrus.SetLevel(log.InfoLevel)
+	logrus.SetFormatter(&logrus.JSONFormatter{})
+	logrus.SetLevel(logrus.InfoLevel)
 
 	ll = log.FromContext(ctx)
 	ctx = log.AddToContext(signalContext(context.Background()), ll)

@@ -19,10 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
-
-	"github.com/vishvananda/netlink"
 )
 
 // Agent creates a wireguard interface, advertises it in the registry, and
@@ -33,12 +30,14 @@ type Agent struct {
 	localCS      *kubernetes.Clientset
 	regClientset *wgmeshClientSet.Clientset
 
-	initOnce sync.Once
-	wg       sync.WaitGroup
+	initOnce  sync.Once
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 
 	localPeer *wgk8s.WireGuardPeer
 
-	wgClient    *wgctrl.Client
+	iface interfaces.WireGuardInterface
+
 	privateKey  wgtypes.Key
 	publicKey   wgtypes.Key
 	psk         wgtypes.Key
@@ -114,14 +113,9 @@ func (a *Agent) Run(ctx context.Context) error {
 		return err
 	}
 
-	a.wgClient, err = a.initializeWireGuard()
-	if err != nil {
-		return err
-	}
-	defer a.wgClient.Close()
 	// We don't want to close the wgClient before all of the goroutines which may depend
 	// on it are finished, so we put the waitgroup at the top of the stack.
-	defer a.wg.Wait()
+	defer
 
 	// Step 2 - Install our Kubernetes WireGuardPeer resource on to the server.
 	a.updateK8sLocalPeer()
@@ -187,79 +181,62 @@ func (a *Agent) registerK8sLocalPeer() error {
 	return nil
 }
 
-func (a *Agent) initializeWireGuard() (wgClient *wgctrl.Client, err error) {
+func (a *Agent) initializeWireGuard() error {
 	a.ll.Debugln("initializing wireguard client")
-	wgClient, err = wgctrl.New()
-	if err != nil {
-		return nil, fmt.Errorf("initializing wgctrl client: %w", err)
-	}
-	defer func() {
-		if err != nil && wgClient != nil {
-			a.ll.Infoln("closing wireguard client")
-			wgClient.Close()
-			wgClient = nil
-		}
-	}()
+
 	ll := a.ll.WithField("interface", a.iface)
 	ll.Infoln("creating wireguard interface")
-	err = interfaces.EnsureWireGuardInterface(wgClient, a.iface)
+	var err error
+	a.iface, err = interfaces.EnsureWireGuardInterface(a.ctx, a.wgIfaceOptions)
 	if err != nil {
-		return // named args to facilitate cleanup.
-	}
-
-	ll.Debugln("loading up wireguard device")
-	device, err := wgClient.Device(a.iface)
-	if err != nil {
-		return // named args to facilitate cleanup.
-	}
-	existingPort := device.ListenPort
-	if a.port == 0 {
-		a.port = existingPort
-	}
-	if a.port != existingPort {
-		err = fmt.Errorf("existing interface bound to different port")
-		return
+		return err
 	}
 
 	ll.Infoln("configuring key and port on wireguard interface")
-	err = wgClient.ConfigureDevice(a.iface, wgtypes.Config{
+	// TODO - Ability to reuse existing private key
+	err = a.iface.ConfigureWireGuard(wgtypes.Config{
 		PrivateKey: &a.privateKey,
-		ListenPort: &a.port,
 	})
 	if err != nil {
-		return
+		return err
 	}
 
 	for _, ip := range a.ips {
-		addr, err := netlink.ParseAddr(ip)
+		addr, subnet, err := net.ParseCIDR(ip)
 		if err != nil {
-			return wgClient, err
+			return fmt.Errorf("parsing IP %q", err)
 		}
-		err = interfaces.SetIP(a.iface, addr)
+		// net.ParseCIDR puts the network base addr in IP by default, but we need to
+		// specify the specific addr we want.
+		subnet.IP = addr
+		err = a.iface.EnsureIP(subnet)
 	}
 
 	ll.Debugln("setting device state up")
-	err = interfaces.SetInterfaceUp(a.iface)
+	err = a.iface.EnsureUp()
 	if err != nil {
-		return // named args to facilitate cleanup.
+		return err
 	}
-	device, err = wgClient.Device(a.iface)
+
+	ifacePort, err := a.iface.GetListenPort()
 	if err != nil {
-		return // named args to facilitate cleanup.
+		return err
 	}
-	a.port = device.ListenPort
+
 	endpointAddr, endpointPort, err := net.SplitHostPort(a.endpointAddr)
 	if err != nil {
-		return // named args to facilitate cleanup.
+		return err
 	}
 	if endpointPort == "" || endpointPort == "0" {
-		// The endpointAddr didn't specifiy a port, use the dynamic port from the wg interface.
-		a.endpointAddr = net.JoinHostPort(endpointAddr, strconv.FormatInt(int64(a.port), 10))
+		// If endpointAddr included a port, we should trust it. The user likely has some flavor
+		// of DNAT between the public internet and this app. If no port is specified, we'll add
+		// the port bound by the WireGuard driver.
+		a.endpointAddr = net.JoinHostPort(endpointAddr, strconv.FormatInt(int64(ifacePort), 10))
 		// TODO - Do we actually want to do this? If we're behind NAT it may mean nothing.
 		ll.Debugln("adding port to endpoint")
 	}
 
-	return wgClient, nil
+	return nil
 }
 
 func (a *Agent) configureWireGuardPeers(ctx context.Context) error {
@@ -281,7 +258,6 @@ func (a *Agent) configureWireGuardPeers(ctx context.Context) error {
 
 	a.peerTracker = &peerTracker{
 		keepalive: a.keepalive,
-		wgClient:  a.wgClient,
 		ll:        a.ll,
 		iface:     a.iface,
 		peers:     make(map[string]*wgk8s.WireGuardPeer),
@@ -303,4 +279,20 @@ func (a *Agent) configureWireGuardPeers(ctx context.Context) error {
 	ll.Infoln("cache fully synced; applying initial config to interface")
 	// Ok, everything should be sync'ed now.
 	return a.peerTracker.applyInitialConfig()
+}
+
+// Close shuts down and cleans up the agent.
+func (a *Agent) Close() error {
+	var err error
+	a.closeOnce.Do(func() {
+		// TODO cancel informer context.
+
+		// Wait for the informer to stop so we don't apply any to a closing interface.
+		a.wg.Wait()
+
+		if a.iface != nil {
+			a.iface.Close()
+		}
+	})
+	return err
 }

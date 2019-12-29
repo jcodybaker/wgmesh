@@ -8,6 +8,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/jcodybaker/wgmesh/pkg/interfaces"
 )
 
 type options struct {
@@ -20,13 +22,13 @@ type options struct {
 	registryKubeClientConfig clientcmd.ClientConfig
 	registryNamespace        string
 
-	iface     string
 	keepalive time.Duration
 
 	endpointAddr string
-	port         int
 	ips          []string
 	offerRoutes  []string
+
+	wgIfaceOptions *interfaces.WireGuardInterfaceOptions
 
 	kubeNode string
 
@@ -90,14 +92,6 @@ func WithRegistryNamespace(registryNamespace string) OptionFunc {
 	}
 }
 
-// WithInterface sets the interface name which will be used for wireguard.
-func WithInterface(iface string) OptionFunc {
-	return func(o *options) error {
-		o.iface = iface
-		return nil
-	}
-}
-
 // WithKeepAliveDuration sets the minimum keep-alive duration which this node
 // should use when communicating with peers.
 func WithKeepAliveDuration(keepalive time.Duration) OptionFunc {
@@ -149,18 +143,18 @@ func WithKubeNode(kubeNode string) OptionFunc {
 	}
 }
 
-// WithPort specifies the port wireguard should listen on.
-func WithPort(port uint16) OptionFunc {
-	return func(o *options) error {
-		o.port = int(port)
-		return nil
-	}
-}
-
 // WithEndpointAddr ...
 func WithEndpointAddr(endpointAddr string) OptionFunc {
 	return func(o *options) error {
 		o.endpointAddr = endpointAddr
+		return nil
+	}
+}
+
+// WithWireGuardInterfaceOptions sets parameters used to create/reuse a WireGuard network interface.
+func WithWireGuardInterfaceOptions(wgIfaceOptions *interfaces.WireGuardInterfaceOptions) OptionFunc {
+	return func(o *options) error {
+		o.wgIfaceOptions = wgIfaceOptions
 		return nil
 	}
 }

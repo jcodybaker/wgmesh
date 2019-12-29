@@ -19,7 +19,7 @@ require (
 	go.uber.org/multierr v1.4.0 // indirect
 	go.uber.org/zap v1.13.0 // indirect
 	golang.org/x/lint v0.0.0-20191125180803-fdd1cda4f05f // indirect
-	golang.org/x/sys v0.0.0-20191210023423-ac6580df4449 // indirect
+	golang.org/x/sys v0.0.0-20191228213918-04cbcbbfeed8
 	golang.org/x/tools v0.0.0-20191206204035-259af5ff87bd // indirect
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20191028205011-23406de29c08
 	gopkg.in/yaml.v2 v2.2.7 // indirect

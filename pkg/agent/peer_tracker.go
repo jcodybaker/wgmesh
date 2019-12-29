@@ -8,8 +8,8 @@ import (
 	"time"
 
 	wgk8s "github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/v1alpha1"
+	"github.com/jcodybaker/wgmesh/pkg/interfaces"
 	log "github.com/sirupsen/logrus"
-	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
@@ -17,8 +17,7 @@ type peerTracker struct {
 	sync.Mutex
 
 	ll                   log.FieldLogger
-	wgClient             *wgctrl.Client
-	iface                string
+	iface                interfaces.WireGuardInterface
 	peers                map[string]*wgk8s.WireGuardPeer
 	initialConfigApplied bool
 	localPeer            *wgk8s.WireGuardPeer
@@ -42,7 +41,7 @@ func (pt *peerTracker) applyUpdate(wgPeer *wgk8s.WireGuardPeer) error {
 	if err != nil {
 		return err
 	}
-	return pt.wgClient.ConfigureDevice(pt.iface, wgtypes.Config{
+	return pt.iface.ConfigureWireGuard(wgtypes.Config{
 		Peers: []wgtypes.PeerConfig{peer},
 	})
 }
@@ -65,7 +64,7 @@ func (pt *peerTracker) deletePeer(wgPeer *wgk8s.WireGuardPeer) error {
 		return err
 	}
 	peer.Remove = true
-	return pt.wgClient.ConfigureDevice(pt.iface, wgtypes.Config{
+	return pt.iface.ConfigureWireGuard(wgtypes.Config{
 		Peers: []wgtypes.PeerConfig{peer},
 	})
 }
@@ -92,7 +91,7 @@ func (pt *peerTracker) applyInitialConfig() error {
 		}
 		config.Peers = append(config.Peers, peer)
 	}
-	return pt.wgClient.ConfigureDevice(pt.iface, config)
+	return pt.iface.ConfigureWireGuard(config)
 }
 
 func (pt *peerTracker) OnAdd(obj interface{}) {

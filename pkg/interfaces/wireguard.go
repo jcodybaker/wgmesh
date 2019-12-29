@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/kballard/go-shellquote"
 	"golang.zx2c4.com/wireguard/wgctrl"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 // WireGuardDriver describes how the WireGuard interface should be created and managed.
@@ -47,21 +50,26 @@ const (
 	userspaceShutdownTimeout = 10 * time.Second
 )
 
-var errUnimplemented = errors.New("unimplemented on this platform")
-
 // WireGuardInterface defines the common set of actions which can be taken against a
 // network interface.
 type WireGuardInterface interface {
-	EnsureUp() error
-	EnsureIP(ip *net.IPNet) error
-	GetIPs() ([]string, error)
-	Close() error
+	// Inherit everything from the non-wireguard specific Interface interface.
+	Interface
+
+	// ConfigureWireGuard configures WireGuard on the specified interface. See:
+	// https://godoc.org/golang.zx2c4.com/wireguard/wgctrl#Client.ConfigureDevice
+	ConfigureWireGuard(cfg wgtypes.Config) error
+
+	// GetListenPort returns the UDP port where the WireGuard driver is listening. The
+	// interface must be in the UP state.
+	GetListenPort() (int, error)
 }
 
 // WireGuardInterfaceOptions ...
 type WireGuardInterfaceOptions struct {
 	InterfaceName        string
 	Driver               WireGuardDriver
+	Port                 int
 	ReuseExisting        bool
 	WireGuardGoPath      string
 	WireGuardGoExtraArgs string
@@ -69,22 +77,63 @@ type WireGuardInterfaceOptions struct {
 	BoringTunExtraArgs   string
 }
 
+type wgInterface struct {
+	wgClient *wgctrl.Client
+	Interface
+}
+
+var _ WireGuardInterface = &wgInterface{}
+
+type wgUserspaceInterface struct {
+	wgInterface
+	cmd        *exec.Cmd
+	driverExit chan error
+	closed     sync.Once
+}
+
+var _ WireGuardInterface = &wgUserspaceInterface{}
+
 // EnsureWireGuardInterface creates or reuses a WireGuard interface based upon the options.
 func EnsureWireGuardInterface(
 	ctx context.Context,
 	options *WireGuardInterfaceOptions,
+) (_ WireGuardInterface, rErr error) {
+	wgClient, err := wgctrl.New()
+	if err != nil {
+		return nil, fmt.Errorf("initializing wgctrl client: %w", err)
+	}
+	defer func() {
+		// Don't leak the client if we're closing on error.
+		if rErr != nil {
+			wgClient.Close()
+		}
+	}()
+	iface, err := createOrReuseWGInterface(ctx, options, wgClient)
+	if err != nil {
+		return nil, err
+	}
+
+	if options.Port != 0 {
+		err = iface.ConfigureWireGuard(wgtypes.Config{
+			ListenPort: &options.Port,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("setting WireGuard listen port on %q to %d", iface.GetName(), options.Port)
+		}
+	}
+	return iface, nil
+}
+
+func createOrReuseWGInterface(
+	ctx context.Context,
+	options *WireGuardInterfaceOptions,
+	wgClient *wgctrl.Client,
 ) (WireGuardInterface, error) {
 	var name string
 	existing, err := getAllInterfaces(options.InterfaceName)
 	if err != nil {
 		return nil, fmt.Errorf("listing existing interfaces: %w", err)
 	}
-
-	wgClient, err := wgctrl.New()
-	if err != nil {
-		return nil, fmt.Errorf("initializing wgctrl client: %w", err)
-	}
-
 	for {
 		var err error
 		name, err = nextInterfaceName(options.InterfaceName, name)
@@ -93,60 +142,77 @@ func EnsureWireGuardInterface(
 		}
 
 		if _, ok := existing[name]; ok {
-			if options.ReuseExisting {
-				if _, err := wgClient.Device(name); err != nil {
+			if options.ReuseExisting || options.Driver == ExistingInterface {
+				d, err := wgClient.Device(name)
+				if err != nil {
 					return nil, fmt.Errorf("initializing existing device: %w", err)
+				}
+				if options.Port != 0 && d.ListenPort != options.Port {
+					return nil, fmt.Errorf(
+						"existing device %q listening on port %d; desired port %d",
+						name, d.ListenPort, options.Port)
 				}
 				return newWGInterface(wgClient, name)
 			}
 			continue
 		}
 
-		if options.Driver == KernelDriver || options.Driver == AutoSelect {
-			iface, err := createWGKernelInterface(wgClient, options, name)
-			switch {
-			case err == nil:
-				return iface, nil
-			case errors.Unwrap(err) == errUnimplemented:
-				// move on to the next driver option
-			case os.IsExist(err):
-				continue
-			case true:
-				// TODO - Catch unknown interface type case
-			default:
-				return nil, err
-			}
+		iface, err := createWGInterfaceWithName(ctx, name, options, wgClient)
+		switch {
+		case err == nil:
+			return iface, nil
+		case os.IsExist(err):
+			continue
+		default:
+			return nil, err
 		}
-
-		if options.Driver == BoringTunDriver || options.Driver == AutoSelect {
-			iface, err := createWGBoringTunInterface(ctx, wgClient, options, name)
-			switch {
-			case err == nil:
-				return iface, nil
-			case errors.Unwrap(err) == errUnimplemented:
-				// move on to the next driver option
-			case os.IsExist(err):
-				continue
-			default:
-				return nil, err
-			}
-		}
-
-		if options.Driver == WireGuardGoDriver || options.Driver == AutoSelect {
-			iface, err := createWGWireguardGoInterface(ctx, wgClient, options, name)
-			switch {
-			case err == nil:
-				return iface, nil
-			case errors.Unwrap(err) == errUnimplemented:
-				// move on to the next driver option
-			case os.IsExist(err):
-				continue
-			default:
-				return nil, err
-			}
-		}
-		return nil, errors.New("no wireguard drivers succeeded")
 	}
+}
+
+func createWGInterfaceWithName(
+	ctx context.Context,
+	name string,
+	options *WireGuardInterfaceOptions,
+	wgClient *wgctrl.Client,
+) (WireGuardInterface, error) {
+	if options.Driver == KernelDriver || options.Driver == AutoSelect {
+		iface, err := createWGKernelInterface(wgClient, options, name)
+		switch {
+		case err == nil:
+			return iface, nil
+		case errors.Unwrap(err) == errUnimplemented:
+			// move on to the next driver option
+		case false:
+			// TODO - Catch and wrap unknown interface type case
+		default:
+			return nil, err
+		}
+	}
+
+	if options.Driver == BoringTunDriver || options.Driver == AutoSelect {
+		iface, err := createWGBoringTunInterface(ctx, wgClient, options, name)
+		switch {
+		case err == nil:
+			return iface, nil
+		case errors.Unwrap(err) == errUnimplemented:
+			// move on to the next driver option
+		default:
+			return nil, err
+		}
+	}
+
+	if options.Driver == WireGuardGoDriver || options.Driver == AutoSelect {
+		iface, err := createWGWireguardGoInterface(ctx, wgClient, options, name)
+		switch {
+		case err == nil:
+			return iface, nil
+		case errors.Unwrap(err) == errUnimplemented:
+			// move on to the next driver option
+		default:
+			return nil, err
+		}
+	}
+	return nil, errors.New("no wireguard drivers succeeded")
 }
 
 // nextInterfaceName
@@ -167,7 +233,35 @@ func nextInterfaceName(desired, last string) (string, error) {
 		return "", fmt.Errorf("generating interface name: %w", err)
 	}
 	num++
-	return fmt.Sprintf("%s%d", base, num), nil
+	name := fmt.Sprintf("%s%d", base, num)
+	err = IsWireGuardInterfaceNameValid(name)
+	if err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+func newWGInterface(wgClient *wgctrl.Client, name string) (WireGuardInterface, error) {
+	iface, err := newInterface(name)
+	if err != nil {
+		return nil, err
+	}
+	return &wgInterface{
+		wgClient:  wgClient,
+		Interface: iface,
+	}, nil
+}
+
+func (w *wgInterface) GetListenPort() (int, error) {
+	d, err := w.wgClient.Device(w.GetName())
+	if err != nil {
+		return 0, err
+	}
+	return d.ListenPort, nil
+}
+
+func (w *wgInterface) ConfigureWireGuard(cfg wgtypes.Config) error {
+	return w.wgClient.ConfigureDevice(w.GetName(), cfg)
 }
 
 func createWGBoringTunInterface(
@@ -226,6 +320,76 @@ func createWGWireguardGoInterface(
 	return startWGUserspaceInterface(ctx, wgClient, name, cmd)
 }
 
+func startWGUserspaceInterface(
+	ctx context.Context,
+	wgClient *wgctrl.Client,
+	name string,
+	cmd *exec.Cmd,
+) (WireGuardInterface, error) {
+	err := cmd.Start()
+	if err != nil {
+		return nil, fmt.Errorf("starting userspace: %w", err)
+	}
+	exit := cmdExit(cmd)
+	iface, err := waitForInterface(ctx, exit, name)
+	if err != nil {
+		return nil, fmt.Errorf("waiting for interface %q to be created: %w", name, err)
+	}
+	return &wgUserspaceInterface{
+		cmd: cmd,
+		wgInterface: wgInterface{
+			Interface: iface,
+			wgClient:  wgClient,
+		},
+	}, nil
+}
+
+func (w *wgUserspaceInterface) Close() error {
+	var errs []error
+	w.closed.Do(func() {
+		err := w.wgInterface.Close()
+		if err != nil {
+			errs = append(errs, err)
+			// fall through to cleanup any processes
+		}
+
+		var pid int
+		if w.cmd == nil && w.cmd.ProcessState == nil {
+			errs = append(errs, errors.New("userspace driver cmd not set"))
+			return
+		}
+		pid = w.cmd.ProcessState.Pid()
+		if pid == 0 {
+			errs = append(errs, errors.New("userspace driver pid not set"))
+			return
+		}
+		err = syscall.Kill(pid, syscall.SIGTERM)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("signaling shutdown to userspace driver: %w", err))
+			// fall through to KILL
+		}
+		t := time.NewTimer(userspaceShutdownTimeout)
+		defer t.Stop()
+		select {
+		case <-t.C:
+			err = syscall.Kill(pid, syscall.SIGKILL)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("killing userspace driver: %w", err))
+				return
+			}
+			// discard exit status because it's likely wonky.
+			<-w.driverExit
+			return
+		case <-w.driverExit:
+			return
+		}
+	})
+	if len(errs) > 0 {
+		return errs[len(errs)-1]
+	}
+	return nil
+}
+
 func cmdExit(cmd *exec.Cmd) <-chan error {
 	quit := make(chan error)
 	go func() {
@@ -233,4 +397,40 @@ func cmdExit(cmd *exec.Cmd) <-chan error {
 		quit <- cmd.Wait()
 	}()
 	return quit
+}
+
+// GetValidWireGuardDrivers returns a list of available WireGuardDrivers for the current platform.
+func GetValidWireGuardDrivers() []string {
+	out := []string{
+		string(AutoSelect),
+		string(ExistingInterface),
+		string(BoringTunDriver),
+		string(WireGuardGoDriver),
+	}
+	if runtime.GOOS == "linux" {
+		out = append(out, string(KernelDriver))
+	}
+	return out
+}
+
+// WireGuardDriverFromString returns a valid WireGuardDriver, or a descriptive error if the
+// specified driver is invalid.
+func WireGuardDriverFromString(driver string) (WireGuardDriver, error) {
+	switch WireGuardDriver(driver) {
+	case AutoSelect:
+		return AutoSelect, nil
+	case ExistingInterface:
+		return ExistingInterface, nil
+	case BoringTunDriver:
+		return BoringTunDriver, nil
+	case WireGuardGoDriver:
+		return WireGuardGoDriver, nil
+	case KernelDriver:
+		if runtime.GOOS == "linux" {
+			return KernelDriver, nil
+		}
+		return "", fmt.Errorf("WireGuard driver %q: %w", KernelDriver, errUnimplemented)
+	default:
+		return "", fmt.Errorf("unknown WireGuard driver %q", driver)
+	}
 }
