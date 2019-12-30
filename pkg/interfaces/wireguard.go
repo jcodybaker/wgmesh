@@ -210,7 +210,6 @@ func createWGInterfaceWithName(
 	return nil, errors.New("no wireguard drivers succeeded")
 }
 
-// nextInterfaceName
 func nextInterfaceName(desired, last string) (string, error) {
 	if !strings.HasSuffix(desired, "+") {
 		if last == "" {
@@ -247,6 +246,8 @@ func newWGInterface(wgClient *wgctrl.Client, name string) (WireGuardInterface, e
 	}, nil
 }
 
+// GetListenPort returns the UDP port where the WireGuard driver is listening. The
+// interface must be in the UP state.
 func (w *wgInterface) GetListenPort() (int, error) {
 	d, err := w.wgClient.Device(w.GetName())
 	if err != nil {
@@ -255,6 +256,8 @@ func (w *wgInterface) GetListenPort() (int, error) {
 	return d.ListenPort, nil
 }
 
+// ConfigureWireGuard configures WireGuard on the specified interface. See:
+// https://godoc.org/golang.zx2c4.com/wireguard/wgctrl#Client.ConfigureDevice
 func (w *wgInterface) ConfigureWireGuard(cfg wgtypes.Config) error {
 	return w.wgClient.ConfigureDevice(w.GetName(), cfg)
 }
@@ -344,6 +347,7 @@ func startWGUserspaceInterface(
 	}, nil
 }
 
+// Close stops the userspace driver and cleans up the interface.
 func (w *wgUserspaceInterface) Close() error {
 	var errs []error
 	w.closed.Do(func() {

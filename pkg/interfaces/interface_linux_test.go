@@ -193,7 +193,7 @@ func TestNewInterface(t *testing.T) {
 	})
 }
 
-func TestEnsureUp(t *testing.T) {
+func TestInterfaceEnsureUp(t *testing.T) {
 	tcs := []struct {
 		name  string
 		setup func(t *testing.T)
@@ -241,7 +241,7 @@ func TestEnsureUp(t *testing.T) {
 	}
 }
 
-func TestEnsureIP(t *testing.T) {
+func TestInterfaceEnsureIP(t *testing.T) {
 	tcs := []struct {
 		name  string
 		setup func(t *testing.T)
@@ -289,6 +289,86 @@ func TestEnsureIP(t *testing.T) {
 				out, err = exec.Command("ip", "addr", "show", "dummy").CombinedOutput()
 				require.NoError(t, err)
 				require.Contains(t, string(out), "192.168.1.1/24")
+			})
+		})
+	}
+}
+
+func TestInterfaceGetIPs(t *testing.T) {
+	testInNetworkNamespace(t, func() {
+		defer func() {
+			out, err := exec.Command("ip", "link", "delete", "dummy").CombinedOutput()
+			if err != nil && !strings.Contains(string(out), "Cannot find device") {
+				panic(fmt.Errorf("failed: ip link delete dummy: %w - %s", err, string(out)))
+			}
+		}()
+
+		out, err := exec.Command("ip", "link", "add", "dev", "dummy", "type", "dummy").CombinedOutput()
+		if err != nil {
+			panic(fmt.Errorf("failed: ip link add dev dummy type dummy: %w - %s", err, string(out)))
+		}
+
+		out, err = exec.Command("ip", "addr", "add", "192.168.1.1/24", "dev", "dummy").CombinedOutput()
+		if err != nil {
+			panic(fmt.Errorf("failed: ip addr add 192.168.1.1/24 dev dummy: %w - %s", err, string(out)))
+		}
+		out, err = exec.Command("ip", "addr", "add", "192.168.2.1/24", "dev", "dummy").CombinedOutput()
+		if err != nil {
+			panic(fmt.Errorf("failed: ip addr add 192.168.2.1/24 dev dummy: %w - %s", err, string(out)))
+		}
+
+		iface, err := newInterface("dummy")
+		require.NoError(t, err)
+
+		ips, err := iface.GetIPs()
+		require.NoError(t, err)
+
+		require.ElementsMatch(t, []string{"192.168.1.1/24", "192.168.2.1/24"}, ips)
+	})
+}
+
+func TestInterfaceClose(t *testing.T) {
+	tcs := []struct {
+		name  string
+		setup func(t *testing.T)
+	}{
+		{
+			name: "success",
+		},
+		{
+			name: "already closed",
+			setup: func(t *testing.T) {
+				out, err := exec.Command("ip", "link", "delete", "dummy").CombinedOutput()
+				require.NoErrorf(t, err, "failed to delete device: %w - %q", err, string(out))
+			},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			testInNetworkNamespace(t, func() {
+				defer func() {
+					out, err := exec.Command("ip", "link", "delete", "dummy").CombinedOutput()
+					if err != nil && !strings.Contains(string(out), "Cannot find device") {
+						panic(fmt.Errorf("failed: ip link delete dummy: %w - %s", err, string(out)))
+					}
+				}()
+
+				out, err := exec.Command("ip", "link", "add", "dev", "dummy", "type", "dummy").CombinedOutput()
+				require.NoErrorf(t, err, "failed to add device: %w - %q", err, string(out))
+
+				iface, err := newInterface("dummy")
+				require.NoError(t, err)
+
+				if tc.setup != nil {
+					tc.setup(t)
+				}
+
+				err = iface.Close()
+				require.NoError(t, err)
+
+				out, err = exec.Command("ip", "addr", "show", "dummy").CombinedOutput()
+				require.NotNil(t, err)
+				require.Contains(t, string(out), "does not exist")
 			})
 		})
 	}

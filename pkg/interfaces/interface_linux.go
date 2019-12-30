@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -109,6 +110,7 @@ func (i *linuxInterface) GetIPs() ([]string, error) {
 	return out, nil
 }
 
+// GetName returns the name of the interface.
 func (i *linuxInterface) GetName() string {
 	return i.name
 }
@@ -125,9 +127,10 @@ func (i *linuxInterface) EnsureIP(ip *net.IPNet) error {
 	return nil
 }
 
+// Close removes the interface.
 func (i *linuxInterface) Close() error {
 	err := netlink.LinkDel(i.link)
-	if os.IsNotExist(err) {
+	if err == syscall.ENODEV {
 		return nil // Don't error if the interface is already gone.
 	}
 	if err != nil {
