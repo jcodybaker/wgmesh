@@ -12,7 +12,7 @@ Vagrant.configure("2") do |config|
   config.vm.provision "shell", inline: <<-'SHELL'
     add-apt-repository ppa:wireguard/wireguard
     apt-get update
-    apt-get install -y wireguard build-essential docker.io
+    apt-get install -y wireguard build-essential docker.io cargo
     usermod -G docker vagrant
     GO_VERSION=$(grep -E 'GO_VERSION :=' /go/src/github.com/jcodybaker/wgmesh/Makefile | cut -d' ' -f 3)
     KUBERNETES_VERSION=$(grep -E 'KUBERNETES_VERSION :=' /go/src/github.com/jcodybaker/wgmesh/Makefile | cut -d' ' -f 3)
@@ -24,6 +24,15 @@ Vagrant.configure("2") do |config|
     echo 'source ~/.profile' > ~vagrant/.bash_profile
     echo 'source ~/.bashrc' >> ~vagrant/.bash_profile
     echo 'cd /go/src/github.com/jcodybaker/wgmesh' >> ~vagrant/.bash_profile
+    source ~/.profile
+    git clone https://github.com/cloudflare/boringtun.git
+    cd boringtun
+    cargo build --release
+    cp target/release/boringtun /usr/local/bin/
+    cd 
+    git clone https://github.com/WireGuard/wireguard-go.git
+    cd wireguard-go
+    make install
   SHELL
 
   config.vm.synced_folder ".", "/go/src/github.com/jcodybaker/wgmesh"

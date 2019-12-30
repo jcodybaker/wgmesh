@@ -3,12 +3,14 @@
 package interfaces
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
@@ -61,6 +63,7 @@ func TestCreateWGKernelInterface(t *testing.T) {
 			testInNetworkNamespace(t, func() {
 				wgClient, err := wgctrl.New()
 				require.NoErrorf(t, err, "failed: creating wgctrl.Client")
+				defer wgClient.Close()
 				defer func() {
 					out, err := exec.Command("ip", "link", "delete", "wg0").CombinedOutput()
 					if err != nil && !strings.Contains(string(out), "Cannot find device") {
@@ -211,6 +214,70 @@ func TestNextInterfaceName(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedNext, next)
+		})
+	}
+}
+
+func TestCreateWGBoringTunInterface(t *testing.T) {
+	_, err := exec.LookPath("boringtun")
+	if exec.ErrNotFound == errors.Unwrap(err) {
+		t.Skip("no boringtun userspace daemon found")
+	}
+	require.NoError(t, err)
+	tcs := []struct {
+		name        string
+		setup       func(t *testing.T)
+		expectError string
+		expectIface bool
+		options     *WireGuardInterfaceOptions
+	}{
+		{
+			name:    "success",
+			options: &WireGuardInterfaceOptions{},
+		},
+		// {
+		// 	name: "already exists",
+		// },
+		// {
+		// 	name: "path doesn't exists",
+		// },
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			testInNetworkNamespace(t, func() {
+				defer func() {
+					out, err := exec.Command("ip", "link", "delete", "wg0").CombinedOutput()
+					if err != nil {
+						if !tc.expectIface {
+							require.Contains(t, string(out), "Cannot find device")
+							return
+						}
+						require.NoError(t, err)
+					} else {
+						require.Truef(t, tc.expectIface, "%w - %s", err, string(out))
+					}
+				}()
+				if tc.setup != nil {
+					tc.setup(t)
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				defer cancel()
+
+				wgClient, err := wgctrl.New()
+				require.NoErrorf(t, err, "failed: creating wgctrl.Client")
+				defer wgClient.Close()
+
+				iface, err := createWGBoringTunInterface(ctx, wgClient, tc.options, "wg0")
+				if tc.expectError == "" {
+					require.NoError(t, err)
+					require.NotNil(t, iface)
+					require.Equal(t, "wg0", iface.GetName())
+					err := iface.Close()
+					require.NoError(t, err)
+					return
+				}
+				require.EqualError(t, err, tc.expectError)
+			})
 		})
 	}
 }
