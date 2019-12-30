@@ -113,10 +113,6 @@ func (a *Agent) Run(ctx context.Context) error {
 		return err
 	}
 
-	// We don't want to close the wgClient before all of the goroutines which may depend
-	// on it are finished, so we put the waitgroup at the top of the stack.
-	defer
-
 	// Step 2 - Install our Kubernetes WireGuardPeer resource on to the server.
 	a.updateK8sLocalPeer()
 	err = a.registerK8sLocalPeer()

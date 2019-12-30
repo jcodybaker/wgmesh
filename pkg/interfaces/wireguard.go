@@ -161,7 +161,7 @@ func createOrReuseWGInterface(
 		switch {
 		case err == nil:
 			return iface, nil
-		case os.IsExist(err):
+		case os.IsExist(errors.Unwrap(err)):
 			continue
 		default:
 			return nil, err
@@ -176,39 +176,34 @@ func createWGInterfaceWithName(
 	wgClient *wgctrl.Client,
 ) (WireGuardInterface, error) {
 	if options.Driver == KernelDriver || options.Driver == AutoSelect {
-		iface, err := createWGKernelInterface(wgClient, options, name)
-		switch {
-		case err == nil:
+		iface, err := createWGKernelInterface(wgClient, name)
+		if err == nil {
 			return iface, nil
-		case errors.Unwrap(err) == errUnimplemented:
-			// move on to the next driver option
-		case false:
-			// TODO - Catch and wrap unknown interface type case
-		default:
+		}
+		cause := errors.Unwrap(err)
+		if options.Driver == KernelDriver || (cause != errDriverNotFound && cause != errUnimplemented) {
 			return nil, err
 		}
 	}
 
 	if options.Driver == BoringTunDriver || options.Driver == AutoSelect {
 		iface, err := createWGBoringTunInterface(ctx, wgClient, options, name)
-		switch {
-		case err == nil:
+		if err == nil {
 			return iface, nil
-		case errors.Unwrap(err) == errUnimplemented:
-			// move on to the next driver option
-		default:
+		}
+		cause := errors.Unwrap(err)
+		if options.Driver == BoringTunDriver || cause != errDriverNotFound {
 			return nil, err
 		}
 	}
 
 	if options.Driver == WireGuardGoDriver || options.Driver == AutoSelect {
 		iface, err := createWGWireguardGoInterface(ctx, wgClient, options, name)
-		switch {
-		case err == nil:
+		if err == nil {
 			return iface, nil
-		case errors.Unwrap(err) == errUnimplemented:
-			// move on to the next driver option
-		default:
+		}
+		cause := errors.Unwrap(err)
+		if options.Driver == WireGuardGoDriver || cause != errDriverNotFound {
 			return nil, err
 		}
 	}
@@ -228,7 +223,7 @@ func nextInterfaceName(desired, last string) (string, error) {
 		return strings.ReplaceAll(desired, "+", "0"), nil
 	}
 	base := desired[:len(desired)-1] // eth+ = eth
-	num, err := strconv.ParseUint(strings.Replace(last, base, "", 0), 10, 32)
+	num, err := strconv.ParseUint(strings.Replace(last, base, "", 1), 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("generating interface name: %w", err)
 	}
@@ -275,9 +270,14 @@ func createWGBoringTunInterface(
 		path = defaultBoringTunPath
 	}
 	qualifiedPath, err := exec.LookPath(path)
-	if err != nil {
+	switch {
+	case err == nil: // SUCCESS - fall past switch
+	case os.IsNotExist(err):
+		return nil, fmt.Errorf("finding boringtun binary %q: %w", path, errDriverNotFound)
+	default:
 		return nil, fmt.Errorf("finding boringtun binary %q: %w", path, err)
 	}
+
 	args := []string{
 		"--foreground",
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"syscall"
 
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -16,7 +17,7 @@ import (
 // for this platform.
 const DefaultWireGuardInterfaceName = "wg+"
 
-func createWGKernelInterface(wgClient *wgctrl.Client, options *WireGuardInterfaceOptions, name string) (WireGuardInterface, error) {
+func createWGKernelInterface(wgClient *wgctrl.Client, name string) (WireGuardInterface, error) {
 	wgLink := netlink.GenericLink{
 		LinkType:  "wireguard",
 		LinkAttrs: netlink.NewLinkAttrs(),
@@ -24,6 +25,10 @@ func createWGKernelInterface(wgClient *wgctrl.Client, options *WireGuardInterfac
 	wgLink.LinkAttrs.Name = name
 
 	err := netlink.LinkAdd(&wgLink)
+	syscallErr, ok := err.(syscall.Errno)
+	if ok && syscallErr == syscall.EOPNOTSUPP {
+		return nil, fmt.Errorf(`%w: "operation not supported" creating WireGuard interface with kernel driver`, errDriverNotFound)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("adding net link %q: %w", name, err)
 	}
@@ -37,7 +42,7 @@ func IsWireGuardInterfaceNameValid(name string) error {
 	case name == "":
 		return errors.New("interface name is empty")
 	case len(name) >= unix.IFNAMSIZ:
-		return fmt.Errorf("interface name may be at most %d characters; got %d", unix.IFNAMSIZ, len(name))
+		return fmt.Errorf("interface name may be at most %d characters; got %d", unix.IFNAMSIZ-1, len(name))
 	case len(strings.Fields(name)) > 1:
 		return fmt.Errorf("interface name %q is invalid: contains whitespace", name)
 	case strings.Contains(name, "/"):

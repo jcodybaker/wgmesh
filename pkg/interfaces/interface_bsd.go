@@ -54,6 +54,6 @@ func getAllInterfaces(desired string) (map[string]struct{}, error) {
 	return nil, fmt.Errorf("interfaces.getAllInterfaces: %w", errUnimplemented)
 }
 
-func createWGKernelInterface(wgClient *wgctrl.Client, options *WireGuardInterfaceOptions, name string) (WireGuardInterface, error) {
+func createWGKernelInterface(wgClient *wgctrl.Client, name string) (WireGuardInterface, error) {
 	return nil, fmt.Errorf("createWGKernelInterface: %w", errUnimplemented)
 }
