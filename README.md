@@ -69,7 +69,7 @@ Global Flags:
 
 ## License
 
-WG Mesh is licensed under the [MIT License](LICENSE).
+Copyright 2019 - J Cody Baker - WG Mesh is licensed under the [MIT License](LICENSE).
 
 ## Legal
 WireGuard is a registered trademark of Jason A. Donenfeld. WG Mesh is not sponsored or endorsed by Jason A. Donenfeld.
