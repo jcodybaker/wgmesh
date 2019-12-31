@@ -65,6 +65,7 @@ Global Flags:
 * IPAM
 * Populate routes via Kubernetes object references. Ex. node.PodCIDR
 * More testing
+* Template out Kubernetes deployment/ds and offer Kustomize or helm templates.
 
 ## License
 
