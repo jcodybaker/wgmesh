@@ -273,10 +273,10 @@ func createWGBoringTunInterface(
 		path = defaultBoringTunPath
 	}
 	qualifiedPath, err := exec.LookPath(path)
-	switch err {
-	case nil: // SUCCESS - fall past switch
-	case exec.ErrNotFound:
-		return nil, fmt.Errorf("finding boringtun binary %q: %w", path, errDriverNotFound)
+	switch {
+	case err == nil: // SUCCESS - fall past switch
+	case errors.Unwrap(err) == exec.ErrNotFound || os.IsNotExist(errors.Unwrap(err)):
+		return nil, fmt.Errorf("finding boringtun binary: %w", errDriverNotFound)
 	default:
 		return nil, fmt.Errorf("finding boringtun binary %q: %w", path, err)
 	}
@@ -307,10 +307,10 @@ func createWGWireguardGoInterface(
 		path = defaultWireGuardGoPath
 	}
 	qualifiedPath, err := exec.LookPath(path)
-	switch err {
-	case nil: // SUCCESS - fall past switch
-	case exec.ErrNotFound:
-		return nil, fmt.Errorf("finding wireguard-go binary %q: %w", path, errDriverNotFound)
+	switch {
+	case err == nil: // SUCCESS - fall past switch
+	case errors.Unwrap(err) == exec.ErrNotFound || os.IsNotExist(errors.Unwrap(err)):
+		return nil, fmt.Errorf("finding wireguard-go binary: %w", errDriverNotFound)
 	default:
 		return nil, fmt.Errorf("finding wireguard-go binary %q: %w", path, err)
 	}
@@ -372,15 +372,20 @@ func (w *wgUserspaceInterface) Close() error {
 			errs = append(errs, errors.New("userspace driver cmd.Process not set"))
 			return
 		}
-		if w.cmd.ProcessState != nil {
-			// If ProcessState != the process has already exited, wait
-			<-w.driverExit
-			return
+		select {
+		case <-w.driverExit:
+			return // Process has already exited.
+		default:
 		}
 		err = process.Signal(syscall.SIGTERM)
 		if err != nil {
+			if strings.Contains(err.Error(), "os: process already finished") {
+				// There's a race here since we're Wait()ing in a separate thread, catch and
+				// ignore the error if the process has already quit.
+				// https://golang.org/pkg/os/ - errFinished is annoyingly not exported
+				return
+			}
 			errs = append(errs, fmt.Errorf("signaling shutdown to userspace driver: %w", err))
-			// fall through to KILL
 		}
 		t := time.NewTimer(userspaceShutdownTimeout)
 		defer t.Stop()
@@ -388,6 +393,9 @@ func (w *wgUserspaceInterface) Close() error {
 		case <-t.C:
 			err = process.Kill()
 			if err != nil {
+				if strings.Contains(err.Error(), "os: process already finished") {
+					return
+				}
 				errs = append(errs, fmt.Errorf("killing userspace driver: %w", err))
 				return
 			}

@@ -36,6 +36,7 @@ func init() {
 	logrus.SetFormatter(&logrus.JSONFormatter{})
 	logrus.SetLevel(logrus.InfoLevel)
 
+	ctx = context.Background()
 	ll = log.FromContext(ctx)
 	ctx = log.AddToContext(signalContext(context.Background()), ll)
 }

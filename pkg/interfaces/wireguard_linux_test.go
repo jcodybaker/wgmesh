@@ -227,6 +227,7 @@ func TestCreateWGBoringTunInterface(t *testing.T) {
 	tcs := []struct {
 		name        string
 		setup       func(t *testing.T)
+		teardown    func(t *testing.T)
 		expectError string
 		expectIface bool
 		options     *WireGuardInterfaceOptions
@@ -235,12 +236,52 @@ func TestCreateWGBoringTunInterface(t *testing.T) {
 			name:    "success",
 			options: &WireGuardInterfaceOptions{},
 		},
+		{
+			name: "success with args",
+			options: &WireGuardInterfaceOptions{
+				BoringTunExtraArgs: "--threads 1",
+			},
+		},
+		// We check for existing interfaces in EnsureWireGuardInterface, but there's a period
+		// between that check and actually creating the interface where another actor could
+		// create this interface. For the existing boringtun code there doesn't seem to be any
+		// way to detect or prevent this. We will see the new interface (created by the other
+		// actor) as active, and move on. Unlike wireguard-go, boringtun doesn't even seem to
+		// care if multiple driver apps reference the same tun device, so provided the device
+		// is a tun, the driver will remain running, servicing the device alongside the other
+		// driver.  ¯\_(ツ)_/¯
+		// Leaving this test commented for a day when I think of a way to address this, or the
+		// boringtun code provides a concrete way to associate a userspace app with its tun.
 		// {
 		// 	name: "already exists",
+		// 	setup: func(t *testing.T) {
+		// 		out, err := exec.Command("ip", "link", "add", "dev", "wg0", "type", "dummy").CombinedOutput()
+		// 		require.NoErrorf(t, err, "failed to add device: %w - %q", err, string(out))
+		// 	},
+		// 	teardown: func(t *testing.T) {
+		// 		out, err := exec.Command("ip", "link", "delete", "dev", "wg0").CombinedOutput()
+		// 		if strings.Contains(string(out), "Cannot find device") {
+		// 			return
+		// 		}
+		// 		require.NoError(t, err)
+		// 	},
+		// 	options:     &WireGuardInterfaceOptions{},
+		// 	expectError: "some error",
 		// },
-		// {
-		// 	name: "path doesn't exists",
-		// },
+		{
+			name: "driver doesn't exist in path",
+			options: &WireGuardInterfaceOptions{
+				BoringTunPath: "notfound",
+			},
+			expectError: `finding boringtun binary: driver not found`,
+		},
+		{ // exec.LookupPath returns a different error for this case.
+			name: "absolute driver path not found",
+			options: &WireGuardInterfaceOptions{
+				BoringTunPath: "/notfound",
+			},
+			expectError: `finding boringtun binary: driver not found`,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -257,6 +298,9 @@ func TestCreateWGBoringTunInterface(t *testing.T) {
 						require.Truef(t, tc.expectIface, "%w - %s", err, string(out))
 					}
 				}()
+				if tc.teardown != nil {
+					defer tc.teardown(t)
+				}
 				if tc.setup != nil {
 					tc.setup(t)
 				}
@@ -272,6 +316,114 @@ func TestCreateWGBoringTunInterface(t *testing.T) {
 					require.NoError(t, err)
 					require.NotNil(t, iface)
 					require.Equal(t, "wg0", iface.GetName())
+
+					_, err = exec.Command("ip", "link", "show", "wg0").CombinedOutput()
+					require.NoError(t, err)
+
+					err := iface.Close()
+					require.NoError(t, err)
+					return
+				}
+				require.EqualError(t, err, tc.expectError)
+			})
+		})
+	}
+}
+
+func TestCreateWGWireGuardGoInterface(t *testing.T) {
+	_, err := exec.LookPath("wireguard-go")
+	if exec.ErrNotFound == errors.Unwrap(err) {
+		t.Skip("no wireguard-go userspace daemon found")
+	}
+	require.NoError(t, err)
+	tcs := []struct {
+		name        string
+		setup       func(t *testing.T)
+		teardown    func(t *testing.T)
+		expectError string
+		expectIface bool
+		options     *WireGuardInterfaceOptions
+	}{
+		{
+			name:    "success",
+			options: &WireGuardInterfaceOptions{},
+		},
+		// We check for existing interfaces in EnsureWireGuardInterface, but there's a period
+		// between that check and actually creating the interface where another actor could
+		// create this interface. The wireguard-go driver will eventually exit, but we will see
+		// the new interface (created by the other actor) as active, and move on. We could let
+		// wireguard-go create the interface and parse some logs verify it succeeded before
+		// continuing, OR we could create the tun device via the WG_TUN_FD env variable. We
+		// don't currently implement either options.
+		// Leaving this code in case I implement one of these options.
+		// {
+		// 	name: "already exists",
+		// 	setup: func(t *testing.T) {
+		// 		out, err := exec.Command("ip", "link", "add", "dev", "wg0", "type", "dummy").CombinedOutput()
+		// 		require.NoErrorf(t, err, "failed to add device: %w - %q", err, string(out))
+		// 	},
+		// 	teardown: func(t *testing.T) {
+		// 		out, err := exec.Command("ip", "link", "delete", "dev", "wg0").CombinedOutput()
+		// 		if strings.Contains(string(out), "Cannot find device") {
+		// 			return
+		// 		}
+		// 		require.NoError(t, err)
+		// 	},
+		// 	options:     &WireGuardInterfaceOptions{},
+		// 	expectError: "some error",
+		// },
+		{
+			name: "driver doesn't exist in path",
+			options: &WireGuardInterfaceOptions{
+				WireGuardGoPath: "notfound",
+			},
+			expectError: `finding wireguard-go binary: driver not found`,
+		},
+		{ // exec.LookupPath returns a different error for this case.
+			name: "absolute driver path not found",
+			options: &WireGuardInterfaceOptions{
+				WireGuardGoPath: "/notfound",
+			},
+			expectError: `finding wireguard-go binary: driver not found`,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			testInNetworkNamespace(t, func() {
+				defer func() {
+					out, err := exec.Command("ip", "link", "delete", "wg0").CombinedOutput()
+					if err != nil {
+						if !tc.expectIface {
+							require.Contains(t, string(out), "Cannot find device")
+							return
+						}
+						require.NoError(t, err)
+					} else {
+						require.Truef(t, tc.expectIface, "%w - %s", err, string(out))
+					}
+				}()
+				if tc.teardown != nil {
+					defer tc.teardown(t)
+				}
+				if tc.setup != nil {
+					tc.setup(t)
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				defer cancel()
+
+				wgClient, err := wgctrl.New()
+				require.NoErrorf(t, err, "failed: creating wgctrl.Client")
+				defer wgClient.Close()
+
+				iface, err := createWGWireguardGoInterface(ctx, wgClient, tc.options, "wg0")
+				if tc.expectError == "" {
+					require.NoError(t, err)
+					require.NotNil(t, iface)
+					require.Equal(t, "wg0", iface.GetName())
+
+					_, err = exec.Command("ip", "link", "show", "wg0").CombinedOutput()
+					require.NoError(t, err)
+
 					err := iface.Close()
 					require.NoError(t, err)
 					return
