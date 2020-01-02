@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2019 John Cody Baker
+Copyright (c) 2020 John Cody Baker
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,10 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// IPPools returns a IPPoolInformer.
+	IPPools() IPPoolInformer
+	// IPv4Claims returns a IPv4ClaimInformer.
+	IPv4Claims() IPv4ClaimInformer
 	// WireGuardPeers returns a WireGuardPeerInformer.
 	WireGuardPeers() WireGuardPeerInformer
 }
@@ -46,6 +50,16 @@ type version struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
+}
+
+// IPPools returns a IPPoolInformer.
+func (v *version) IPPools() IPPoolInformer {
+	return &iPPoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// IPv4Claims returns a IPv4ClaimInformer.
+func (v *version) IPv4Claims() IPv4ClaimInformer {
+	return &iPv4ClaimInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // WireGuardPeers returns a WireGuardPeerInformer.

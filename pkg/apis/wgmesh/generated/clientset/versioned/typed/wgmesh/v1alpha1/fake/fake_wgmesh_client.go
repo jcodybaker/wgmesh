@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2019 John Cody Baker
+Copyright (c) 2020 John Cody Baker
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +35,14 @@ import (
 
 type FakeWgmeshV1alpha1 struct {
 	*testing.Fake
+}
+
+func (c *FakeWgmeshV1alpha1) IPPools(namespace string) v1alpha1.IPPoolInterface {
+	return &FakeIPPools{c, namespace}
+}
+
+func (c *FakeWgmeshV1alpha1) IPv4Claims(namespace string) v1alpha1.IPv4ClaimInterface {
+	return &FakeIPv4Claims{c, namespace}
 }
 
 func (c *FakeWgmeshV1alpha1) WireGuardPeers(namespace string) v1alpha1.WireGuardPeerInterface {

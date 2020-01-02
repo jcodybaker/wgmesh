@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2019 John Cody Baker
+Copyright (c) 2020 John Cody Baker
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

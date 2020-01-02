@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2019 John Cody Baker
+Copyright (c) 2020 John Cody Baker
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -35,12 +35,22 @@ import (
 
 type WgmeshV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	IPPoolsGetter
+	IPv4ClaimsGetter
 	WireGuardPeersGetter
 }
 
 // WgmeshV1alpha1Client is used to interact with features provided by the wgmesh.codybaker.com group.
 type WgmeshV1alpha1Client struct {
 	restClient rest.Interface
+}
+
+func (c *WgmeshV1alpha1Client) IPPools(namespace string) IPPoolInterface {
+	return newIPPools(c, namespace)
+}
+
+func (c *WgmeshV1alpha1Client) IPv4Claims(namespace string) IPv4ClaimInterface {
+	return newIPv4Claims(c, namespace)
 }
 
 func (c *WgmeshV1alpha1Client) WireGuardPeers(namespace string) WireGuardPeerInterface {
