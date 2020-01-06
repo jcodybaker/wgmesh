@@ -210,10 +210,11 @@ func TestIncrementIPNetV4(t *testing.T) {
 
 func TestIPPoolFindAddress(t *testing.T) {
 	tcs := []struct {
-		name       string
-		expectIPs  []string
-		expectMask net.IPMask
-		pool       *ipPool
+		name        string
+		pool        *ipPool
+		expectError string
+		expectIPs   []string
+		expectMask  net.IPMask
 	}{
 		{
 			name: "success",
@@ -285,11 +286,45 @@ func TestIPPoolFindAddress(t *testing.T) {
 			expectIPs:  []string{"10.0.1.0"},
 			expectMask: net.CIDRMask(31, 32),
 		},
+		{
+			name: "no addr available",
+			pool: &ipPool{
+				ranges: []*ipRange{
+					{
+						cidr: &net.IPNet{
+							IP:   net.ParseIP("10.0.0.0"),
+							Mask: net.CIDRMask(31, 32),
+						},
+						start: net.ParseIP("10.0.0.0"),
+						end:   net.ParseIP("10.0.0.1"),
+					},
+					{
+						cidr: &net.IPNet{
+							IP:   net.ParseIP("10.0.1.0"),
+							Mask: net.CIDRMask(31, 32),
+						},
+						start: net.ParseIP("10.0.1.0"),
+						end:   net.ParseIP("10.0.1.1"),
+					},
+				},
+				inUse: map[string]struct{}{
+					"10.0.0.0": struct{}{},
+					"10.0.0.1": struct{}{},
+					"10.0.1.0": struct{}{},
+					"10.0.1.1": struct{}{},
+				},
+			},
+			expectError: errNoAvailableIPAddresses.Error(),
+		},
 	}
 	for _, tc := range tcs {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.pool.findAddress()
+			if tc.expectError != "" {
+				require.EqualError(t, err, tc.expectError)
+				return
+			}
 			require.NoError(t, err)
 			require.Contains(t, tc.expectIPs, got.IP.String())
 			require.Equal(t, tc.expectMask, got.Mask)
