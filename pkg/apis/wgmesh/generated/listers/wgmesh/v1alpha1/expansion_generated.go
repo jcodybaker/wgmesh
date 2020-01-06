@@ -27,6 +27,14 @@ SOFTWARE.
 
 package v1alpha1
 
+// IPClaimListerExpansion allows custom methods to be added to
+// IPClaimLister.
+type IPClaimListerExpansion interface{}
+
+// IPClaimNamespaceListerExpansion allows custom methods to be added to
+// IPClaimNamespaceLister.
+type IPClaimNamespaceListerExpansion interface{}
+
 // IPPoolListerExpansion allows custom methods to be added to
 // IPPoolLister.
 type IPPoolListerExpansion interface{}
@@ -34,14 +42,6 @@ type IPPoolListerExpansion interface{}
 // IPPoolNamespaceListerExpansion allows custom methods to be added to
 // IPPoolNamespaceLister.
 type IPPoolNamespaceListerExpansion interface{}
-
-// IPv4ClaimListerExpansion allows custom methods to be added to
-// IPv4ClaimLister.
-type IPv4ClaimListerExpansion interface{}
-
-// IPv4ClaimNamespaceListerExpansion allows custom methods to be added to
-// IPv4ClaimNamespaceLister.
-type IPv4ClaimNamespaceListerExpansion interface{}
 
 // WireGuardPeerListerExpansion allows custom methods to be added to
 // WireGuardPeerLister.

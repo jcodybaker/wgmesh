@@ -33,10 +33,10 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// IPClaims returns a IPClaimInformer.
+	IPClaims() IPClaimInformer
 	// IPPools returns a IPPoolInformer.
 	IPPools() IPPoolInformer
-	// IPv4Claims returns a IPv4ClaimInformer.
-	IPv4Claims() IPv4ClaimInformer
 	// WireGuardPeers returns a WireGuardPeerInformer.
 	WireGuardPeers() WireGuardPeerInformer
 }
@@ -52,14 +52,14 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
+// IPClaims returns a IPClaimInformer.
+func (v *version) IPClaims() IPClaimInformer {
+	return &iPClaimInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
 // IPPools returns a IPPoolInformer.
 func (v *version) IPPools() IPPoolInformer {
 	return &iPPoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
-}
-
-// IPv4Claims returns a IPv4ClaimInformer.
-func (v *version) IPv4Claims() IPv4ClaimInformer {
-	return &iPv4ClaimInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // WireGuardPeers returns a WireGuardPeerInformer.

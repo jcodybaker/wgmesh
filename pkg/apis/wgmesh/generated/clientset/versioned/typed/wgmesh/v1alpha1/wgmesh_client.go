@@ -35,8 +35,8 @@ import (
 
 type WgmeshV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	IPClaimsGetter
 	IPPoolsGetter
-	IPv4ClaimsGetter
 	WireGuardPeersGetter
 }
 
@@ -45,12 +45,12 @@ type WgmeshV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *WgmeshV1alpha1Client) IPPools(namespace string) IPPoolInterface {
-	return newIPPools(c, namespace)
+func (c *WgmeshV1alpha1Client) IPClaims(namespace string) IPClaimInterface {
+	return newIPClaims(c, namespace)
 }
 
-func (c *WgmeshV1alpha1Client) IPv4Claims(namespace string) IPv4ClaimInterface {
-	return newIPv4Claims(c, namespace)
+func (c *WgmeshV1alpha1Client) IPPools(namespace string) IPPoolInterface {
+	return newIPPools(c, namespace)
 }
 
 func (c *WgmeshV1alpha1Client) WireGuardPeers(namespace string) WireGuardPeerInterface {

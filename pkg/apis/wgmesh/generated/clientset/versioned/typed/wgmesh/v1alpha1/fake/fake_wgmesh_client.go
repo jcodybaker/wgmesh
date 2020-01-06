@@ -37,12 +37,12 @@ type FakeWgmeshV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeWgmeshV1alpha1) IPPools(namespace string) v1alpha1.IPPoolInterface {
-	return &FakeIPPools{c, namespace}
+func (c *FakeWgmeshV1alpha1) IPClaims(namespace string) v1alpha1.IPClaimInterface {
+	return &FakeIPClaims{c, namespace}
 }
 
-func (c *FakeWgmeshV1alpha1) IPv4Claims(namespace string) v1alpha1.IPv4ClaimInterface {
-	return &FakeIPv4Claims{c, namespace}
+func (c *FakeWgmeshV1alpha1) IPPools(namespace string) v1alpha1.IPPoolInterface {
+	return &FakeIPPools{c, namespace}
 }
 
 func (c *FakeWgmeshV1alpha1) WireGuardPeers(namespace string) v1alpha1.WireGuardPeerInterface {

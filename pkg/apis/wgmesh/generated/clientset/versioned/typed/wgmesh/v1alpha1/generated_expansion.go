@@ -27,8 +27,8 @@ SOFTWARE.
 
 package v1alpha1
 
-type IPPoolExpansion interface{}
+type IPClaimExpansion interface{}
 
-type IPv4ClaimExpansion interface{}
+type IPPoolExpansion interface{}
 
 type WireGuardPeerExpansion interface{}
