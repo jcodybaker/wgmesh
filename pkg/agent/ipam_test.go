@@ -426,7 +426,7 @@ func TestRegistryIPAMLoadPool(t *testing.T) {
 					},
 				},
 			},
-			expectError: `pool "ns:name" ipv4.start "192.168.5.1" was not contained by cidr "192.168.1.0/24"`,
+			expectError: `ipv4.start "192.168.5.1" was not contained by cidr "192.168.1.0/24"`,
 		},
 		{
 			name: "end out of range",
@@ -441,7 +441,7 @@ func TestRegistryIPAMLoadPool(t *testing.T) {
 					},
 				},
 			},
-			expectError: `pool "ns:name" ipv4.end "192.168.5.1" was not contained by cidr "192.168.1.0/24"`,
+			expectError: `ipv4.end "192.168.5.1" was not contained by cidr "192.168.1.0/24"`,
 		},
 	}
 	for _, tc := range tcs {

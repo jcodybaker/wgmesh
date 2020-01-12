@@ -54,7 +54,7 @@ func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
 		IPPools(namespace).
 		Get(poolName, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("loading pool %s:%s: %w", namespace, poolName, err)
+		return nil, fmt.Errorf("getting pool: %w", err)
 	}
 
 	// Shuffle the order of ranges so we start with a random one and can visit all if needed.
@@ -66,42 +66,37 @@ func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
 		ipr := poolRecord.Spec.IPRanges[i]
 		_, cidr, err := net.ParseCIDR(ipr.CIDR)
 		if err != nil {
-			return nil, fmt.Errorf("parsing pool \"%s:%s\" ipv4.cidr %q",
-				namespace, poolName, ipr.CIDR)
+			return nil, fmt.Errorf("parsing ipv4.cidr %q", ipr.CIDR)
 		}
 		var start, end net.IP
 		if ipr.Start != "" {
 			start = net.ParseIP(ipr.Start)
 			if start == nil {
-				return nil, fmt.Errorf("parsing pool \"%s:%s\" ipv4.start %q",
-					namespace, poolName, ipr.Start)
+				return nil, fmt.Errorf("parsing ipv4.start %q", ipr.Start)
 			}
 			if !cidr.Contains(start) {
-				return nil, fmt.Errorf("pool \"%s:%s\" ipv4.start %q was not contained by cidr %q",
-					namespace, poolName, ipr.Start, cidr.String())
+				return nil, fmt.Errorf("ipv4.start %q was not contained by cidr %q",
+					ipr.Start, cidr.String())
 			}
 		} else {
 			start, err = defaultRangeStart(cidr)
 			if err != nil {
-				return nil, fmt.Errorf("calculating default end address for pool \"%s:%s\": %w",
-					namespace, poolName, err)
+				return nil, fmt.Errorf("calculating default end address: %w", err)
 			}
 		}
 		if ipr.End != "" {
 			end = net.ParseIP(ipr.End)
 			if end == nil {
-				return nil, fmt.Errorf("parsing pool \"%s:%s\" ipv4.end %q",
-					namespace, poolName, ipr.End)
+				return nil, fmt.Errorf("parsing ipv4.end %q", ipr.End)
 			}
 			if !cidr.Contains(end) {
-				return nil, fmt.Errorf("pool \"%s:%s\" ipv4.end %q was not contained by cidr %q",
-					namespace, poolName, ipr.End, cidr.String())
+				return nil, fmt.Errorf("ipv4.end %q was not contained by cidr %q",
+					ipr.End, cidr.String())
 			}
 		} else {
 			end, err = defaultRangeEnd(cidr)
 			if err != nil {
-				return nil, fmt.Errorf("calculating default end address for pool \"%s:%s\": %w",
-					namespace, poolName, err)
+				return nil, fmt.Errorf("calculating default end address: %w", err)
 			}
 		}
 		pool.ranges = append(pool.ranges, &ipRange{
@@ -127,14 +122,14 @@ func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
 			LabelSelector: "",
 		})
 	if err != nil {
-		return nil, fmt.Errorf("loading claims %s:%s: %w", namespace, poolName, err)
+		return nil, fmt.Errorf("listing claims: %w", err)
 	}
 
 	for _, claim := range claims.Items {
 		// These are user provided, parse them and then serialize them in canonical format.
 		reserved := net.ParseIP(claim.Spec.IP)
 		if reserved == nil {
-			return nil, fmt.Errorf(`parsing reserved claim "%s:%s" - ip %q`,
+			return nil, fmt.Errorf(`parsing claim "%s:%s" - ip %q`,
 				namespace, claim.GetName(), claim.Spec.IP)
 		}
 		pool.inUse[reserved.String()] = struct{}{}
