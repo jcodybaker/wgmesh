@@ -1,7 +1,11 @@
 /*
 MIT License
 
+<<<<<<< HEAD
 Copyright (c) 2019 John Cody Baker
+=======
+Copyright (c) 2020 John Cody Baker
+>>>>>>> 7d8734c... Add test for ipam load loop
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -30,21 +34,15 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"k8s.io/client-go/kubernetes/scheme"
 )
 
 const (
 	// GroupName is the group name used in this package.
 	GroupName string = "wgmesh.codybaker.com"
-	// Kind ...
-	Kind string = "WireGuardPeer"
 	// GroupVersion is the version.
 	GroupVersion string = "v1alpha1"
-	// Plural is the Plural for WireGuardPeer.
-	Plural string = "wireguardpeers"
-	// Singular is the singular for WireGuardPeer.
-	Singular string = "wireguardpeer"
-	// CRDName is the CRD name for WireGuardPeer.
-	CRDName string = Plural + "." + GroupName
 )
 
 var (
@@ -71,8 +69,16 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&WireGuardPeer{},
 		&WireGuardPeerList{},
+		&IPPool{},
+		&IPPoolList{},
+		&IPClaim{},
+		&IPClaimList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 
 	return nil
+}
+
+func init() {
+	AddToScheme(scheme.Scheme)
 }

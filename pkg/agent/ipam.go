@@ -7,17 +7,21 @@ import (
 	"fmt"
 	mathrand "math/rand"
 	"net"
+	"regexp"
+	"strings"
 
-	wgmeshClientSet "github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/generated/clientset/versioned"
+	wgmeshCS "github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/generated/clientset/versioned"
 	wgk8s "github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var errNoAvailableIPAddresses = errors.New("no available IP addresses")
 
+var claimIPRegexp = regexp.MustCompile(`[^a-f0-9]`)
+
 type registryIPAM struct {
 	name      string
-	clientset wgmeshClientSet.Clientset
+	clientset wgmeshCS.Interface
 	claims    []wgk8s.IPClaim
 }
 
@@ -29,7 +33,7 @@ type ipPool struct {
 }
 
 type ipRange struct {
-	cidr  *net.IPNet
+	cidr  net.IPNet
 	start net.IP
 	end   net.IP
 }
@@ -41,7 +45,8 @@ func (r *registryIPAM) ClaimIPv4(namespace, poolName string) (*net.IPNet, error)
 
 func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
 	pool := &ipPool{
-		name: fmt.Sprintf("%s:%s", namespace, poolName),
+		name:  fmt.Sprintf("%s:%s", namespace, poolName),
+		inUse: make(map[string]struct{}),
 	}
 
 	poolRecord, err := r.clientset.
@@ -53,14 +58,10 @@ func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
 	}
 
 	// Shuffle the order of ranges so we start with a random one and can visit all if needed.
-	seedB := make([]byte, 8)
-	_, err = rand.Read(seedB)
+	rangeIndexes, err := randPerm(len(poolRecord.Spec.IPRanges))
 	if err != nil {
-		return nil, fmt.Errorf("shuffling ranges: %w", err)
+		return nil, fmt.Errorf("shuffling ip ranges: %w", err)
 	}
-	seed, _ := binary.Varint(seedB)
-	mrand := mathrand.New(mathrand.NewSource(seed))
-	rangeIndexes := mrand.Perm(len(poolRecord.Spec.IPRanges))
 	for _, i := range rangeIndexes {
 		ipr := poolRecord.Spec.IPRanges[i]
 		_, cidr, err := net.ParseCIDR(ipr.CIDR)
@@ -104,7 +105,7 @@ func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
 			}
 		}
 		pool.ranges = append(pool.ranges, &ipRange{
-			cidr:  cidr,
+			cidr:  *cidr,
 			start: start,
 			end:   end,
 		})
@@ -147,7 +148,7 @@ func (p *ipPool) findAddress() (*net.IPNet, error) {
 	for _, r := range p.ranges {
 		// Select a random IP in the range and increment until we find a free address or find ourselves
 		// back where we started.
-		firstTry, err := randomInCIDR(r.cidr)
+		firstTry, err := randomInCIDR(&r.cidr)
 		if err != nil {
 			return nil, fmt.Errorf("selecting random ip: %w", err)
 		}
@@ -374,4 +375,19 @@ func byteSliceIncrement(b []byte) {
 	if b[last] == 0 && last != 1 {
 		byteSliceIncrement(b[:last-1])
 	}
+}
+
+func randPerm(n int) ([]int, error) {
+	seedB := make([]byte, 8)
+	_, err := rand.Read(seedB)
+	if err != nil {
+		return nil, err
+	}
+	seed, _ := binary.Varint(seedB)
+	mrand := mathrand.New(mathrand.NewSource(seed))
+	return mrand.Perm(n), nil
+}
+
+func claimName(pool, ip string) string {
+	return fmt.Sprintf("%s-%s", pool, claimIPRegexp.ReplaceAllString(strings.ToLower(ip), "-"))
 }

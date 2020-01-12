@@ -4,6 +4,10 @@ import (
 	"net"
 	"testing"
 
+	"github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/generated/clientset/versioned/fake"
+	wgk8s "github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -221,7 +225,7 @@ func TestIPPoolFindAddress(t *testing.T) {
 			pool: &ipPool{
 				ranges: []*ipRange{
 					{
-						cidr: &net.IPNet{
+						cidr: net.IPNet{
 							IP:   net.ParseIP("10.0.0.0"),
 							Mask: net.CIDRMask(30, 32),
 						},
@@ -241,7 +245,7 @@ func TestIPPoolFindAddress(t *testing.T) {
 			pool: &ipPool{
 				ranges: []*ipRange{
 					{
-						cidr: &net.IPNet{
+						cidr: net.IPNet{
 							IP:   net.ParseIP("10.0.0.0"),
 							Mask: net.CIDRMask(31, 32),
 						},
@@ -261,7 +265,7 @@ func TestIPPoolFindAddress(t *testing.T) {
 			pool: &ipPool{
 				ranges: []*ipRange{
 					{
-						cidr: &net.IPNet{
+						cidr: net.IPNet{
 							IP:   net.ParseIP("10.0.0.0"),
 							Mask: net.CIDRMask(31, 32),
 						},
@@ -269,7 +273,7 @@ func TestIPPoolFindAddress(t *testing.T) {
 						end:   net.ParseIP("10.0.0.1"),
 					},
 					{
-						cidr: &net.IPNet{
+						cidr: net.IPNet{
 							IP:   net.ParseIP("10.0.1.0"),
 							Mask: net.CIDRMask(31, 32),
 						},
@@ -291,7 +295,7 @@ func TestIPPoolFindAddress(t *testing.T) {
 			pool: &ipPool{
 				ranges: []*ipRange{
 					{
-						cidr: &net.IPNet{
+						cidr: net.IPNet{
 							IP:   net.ParseIP("10.0.0.0"),
 							Mask: net.CIDRMask(31, 32),
 						},
@@ -299,7 +303,7 @@ func TestIPPoolFindAddress(t *testing.T) {
 						end:   net.ParseIP("10.0.0.1"),
 					},
 					{
-						cidr: &net.IPNet{
+						cidr: net.IPNet{
 							IP:   net.ParseIP("10.0.1.0"),
 							Mask: net.CIDRMask(31, 32),
 						},
@@ -328,6 +332,148 @@ func TestIPPoolFindAddress(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, tc.expectIPs, got.IP.String())
 			require.Equal(t, tc.expectMask, got.Mask)
+		})
+	}
+}
+
+func TestRegistryIPAMLoadPool(t *testing.T) {
+	tcs := []struct {
+		name         string
+		k8sippool    *wgk8s.IPPool
+		claims       []string
+		expectName   string
+		expectInUse  []string
+		expectRanges []*ipRange
+		expectError  string
+	}{
+		{
+			name: "success",
+			k8sippool: &wgk8s.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "name"},
+				Spec: wgk8s.IPPoolSpec{
+					Reserved: []string{"192.168.1.1"},
+					IPRanges: []wgk8s.IPRange{
+						{
+							CIDR: "192.168.1.0/24",
+						},
+					},
+				},
+			},
+			claims:      []string{"192.168.1.2"},
+			expectName:  "ns:name",
+			expectInUse: []string{"192.168.1.1", "192.168.1.2"},
+			expectRanges: []*ipRange{
+				&ipRange{
+					cidr: net.IPNet{
+						Mask: net.CIDRMask(24, 32),
+						IP:   net.ParseIP("192.168.1.0").To4(),
+					},
+					start: net.ParseIP("192.168.1.1").To4(),
+					end:   net.ParseIP("192.168.1.254").To4(),
+				},
+			},
+		},
+		{
+			name: "multiple ranges",
+			k8sippool: &wgk8s.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "name"},
+				Spec: wgk8s.IPPoolSpec{
+					Reserved: []string{"192.168.1.1"},
+					IPRanges: []wgk8s.IPRange{
+						{
+							CIDR: "192.168.1.0/24",
+						},
+						{
+							CIDR:  "10.1.2.64/28",
+							Start: "10.1.2.66",
+							End:   "10.1.2.75",
+						},
+					},
+				},
+			},
+			claims:      []string{"192.168.1.2"},
+			expectName:  "ns:name",
+			expectInUse: []string{"192.168.1.1", "192.168.1.2"},
+			expectRanges: []*ipRange{
+				&ipRange{
+					cidr: net.IPNet{
+						Mask: net.CIDRMask(24, 32),
+						IP:   net.ParseIP("192.168.1.0").To4(),
+					},
+					start: net.ParseIP("192.168.1.1").To4(),
+					end:   net.ParseIP("192.168.1.254").To4(),
+				},
+				&ipRange{
+					cidr: net.IPNet{
+						Mask: net.CIDRMask(28, 32),
+						IP:   net.ParseIP("10.1.2.64").To4(),
+					},
+					start: net.ParseIP("10.1.2.66"),
+					end:   net.ParseIP("10.1.2.75"),
+				},
+			},
+		},
+		{
+			name: "start out of range",
+			k8sippool: &wgk8s.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "name"},
+				Spec: wgk8s.IPPoolSpec{
+					IPRanges: []wgk8s.IPRange{
+						{
+							CIDR:  "192.168.1.0/24",
+							Start: "192.168.5.1",
+						},
+					},
+				},
+			},
+			expectError: `pool "ns:name" ipv4.start "192.168.5.1" was not contained by cidr "192.168.1.0/24"`,
+		},
+		{
+			name: "end out of range",
+			k8sippool: &wgk8s.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "name"},
+				Spec: wgk8s.IPPoolSpec{
+					IPRanges: []wgk8s.IPRange{
+						{
+							CIDR: "192.168.1.0/24",
+							End:  "192.168.5.1",
+						},
+					},
+				},
+			},
+			expectError: `pool "ns:name" ipv4.end "192.168.5.1" was not contained by cidr "192.168.1.0/24"`,
+		},
+	}
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			r := &registryIPAM{
+				name:      t.Name(),
+				clientset: fake.NewSimpleClientset(),
+			}
+
+			_, err := r.clientset.WgmeshV1alpha1().IPPools(tc.k8sippool.GetNamespace()).Create(tc.k8sippool)
+			require.NoError(t, err)
+			for _, claim := range tc.claims {
+				_, err = r.clientset.WgmeshV1alpha1().IPClaims(tc.k8sippool.GetNamespace()).Create(&wgk8s.IPClaim{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: claimName(tc.k8sippool.Name, claim)},
+					Spec:       wgk8s.IPClaimSpec{IP: claim},
+				})
+				require.NoError(t, err)
+			}
+			ipPool, err := r.loadPool(tc.k8sippool.GetNamespace(), tc.k8sippool.GetName())
+			if tc.expectError != "" {
+				require.EqualError(t, err, tc.expectError)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectName, ipPool.name)
+			expectInUse := make(map[string]struct{}, len(tc.expectInUse))
+			for _, inUse := range tc.expectInUse {
+				expectInUse[inUse] = struct{}{}
+			}
+			require.Equal(t, expectInUse, ipPool.inUse)
+			require.ElementsMatch(t, tc.expectRanges, ipPool.ranges)
 		})
 	}
 }

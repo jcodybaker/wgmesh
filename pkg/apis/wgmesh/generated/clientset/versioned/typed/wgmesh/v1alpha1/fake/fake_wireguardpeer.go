@@ -45,7 +45,7 @@ type FakeWireGuardPeers struct {
 
 var wireguardpeersResource = schema.GroupVersionResource{Group: "wgmesh.codybaker.com", Version: "v1alpha1", Resource: "wireguardpeers"}
 
-var wireguardpeersKind = schema.GroupVersionKind{Group: "wgmesh.codybaker.com", Version: "v1alpha1", Kind: "WireguardPeer"}
+var wireguardpeersKind = schema.GroupVersionKind{Group: "wgmesh.codybaker.com", Version: "v1alpha1", Kind: "WireGuardPeer"}
 
 // Get takes name of the wireGuardPeer, and returns the corresponding wireGuardPeer object, and an error if there is any.
 func (c *FakeWireGuardPeers) Get(name string, options v1.GetOptions) (result *v1alpha1.WireGuardPeer, err error) {

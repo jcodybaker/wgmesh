@@ -1,7 +1,11 @@
 /*
 MIT License
 
+<<<<<<< HEAD
 Copyright (c) 2019 John Cody Baker
+=======
+Copyright (c) 2020 John Cody Baker
+>>>>>>> 7d8734c... Add test for ipam load loop
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -116,7 +120,7 @@ type IPPoolList struct {
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// +resource:path=IPClaims
+// +resource:path=ipclaims
 
 // IPClaim is the Schema for the WireGuardPeers API
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -133,7 +137,7 @@ type IPClaimSpec struct {
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-// +resource:path=IPClaims
+// +resource:path=ipclaims
 
 // IPClaimList contains a list of IPClaims.
 type IPClaimList struct {
