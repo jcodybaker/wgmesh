@@ -22,7 +22,7 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-// Agent creates a wireguard interface, advertises it in the registry, and
+// Agent creates a WireGuard interface, advertises it in the registry, and
 // manages relationships with its peers.
 type Agent struct {
 	options
@@ -44,7 +44,7 @@ type Agent struct {
 	peerTracker *peerTracker
 }
 
-// NewAgent creates an agent to manage a local wireguard peer.
+// NewAgent creates an agent to manage a local WireGuard peer.
 func NewAgent(name string, optionFuncs ...OptionFunc) (*Agent, error) {
 	a := &Agent{
 		options: defaultOptions(),
@@ -87,16 +87,16 @@ func (a *Agent) init(ctx context.Context) error {
 		return fmt.Errorf("building registry wgmesh clientset: %w", err)
 	}
 
-	// Step 1 - Configure wireguard
+	// Step 1 - Configure WireGuard
 	a.ll.Debugln("generating private key")
 	a.privateKey, err = wgtypes.GeneratePrivateKey()
 	if err != nil {
-		return fmt.Errorf("generating wireguard private key: %w", err)
+		return fmt.Errorf("generating WireGuard private key: %w", err)
 	}
 	a.ll.Debugln("generating pre-shared key")
 	a.psk, err = wgtypes.GenerateKey()
 	if err != nil {
-		return fmt.Errorf("generating wireguard pre-shared key: %w", err)
+		return fmt.Errorf("generating WireGuard pre-shared key: %w", err)
 	}
 
 	// TODO - Validate K8s permissions w/ CanI
@@ -178,17 +178,17 @@ func (a *Agent) registerK8sLocalPeer() error {
 }
 
 func (a *Agent) initializeWireGuard() error {
-	a.ll.Debugln("initializing wireguard client")
+	a.ll.Debugln("initializing WireGuard client")
 
 	ll := a.ll.WithField("interface", a.iface)
-	ll.Infoln("creating wireguard interface")
+	ll.Infoln("creating WireGuard interface")
 	var err error
 	a.iface, err = interfaces.EnsureWireGuardInterface(a.ctx, a.wgIfaceOptions)
 	if err != nil {
 		return err
 	}
 
-	ll.Infoln("configuring key and port on wireguard interface")
+	ll.Infoln("configuring key and port on WireGuard interface")
 	// TODO - Ability to reuse existing private key
 	err = a.iface.ConfigureWireGuard(wgtypes.Config{
 		PrivateKey: &a.privateKey,

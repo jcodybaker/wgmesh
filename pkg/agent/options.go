@@ -101,7 +101,7 @@ func WithKeepAliveDuration(keepalive time.Duration) OptionFunc {
 	}
 }
 
-// WithIPs sets a list of IP addresses to add to the wireguard interface.
+// WithIPs sets a list of IP addresses to add to the WireGuard interface.
 func WithIPs(ips []string) OptionFunc {
 	return func(o *options) error {
 		o.ips = ips
@@ -118,7 +118,7 @@ func WithOfferRoutes(offerRoutes []string) OptionFunc {
 }
 
 // WithPeerSelector is a label selector which sets the list of peers we will
-// add to the wireguard interface. This can be used to exclude peers we have
+// add to the WireGuard interface. This can be used to exclude peers we have
 // local connectivty with.
 func WithPeerSelector(peerSelector labels.Selector) OptionFunc {
 	return func(o *options) error {

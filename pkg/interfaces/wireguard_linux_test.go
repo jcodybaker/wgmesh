@@ -56,9 +56,9 @@ func TestCreateWGKernelInterface(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.moduleLoaded && !haveMod {
-				t.Skip("wireguard kernel module required")
+				t.Skip("WireGuard kernel module required")
 			} else if !tc.moduleLoaded && haveMod {
-				t.Skip("test requires an environment without the wireguard kernel module")
+				t.Skip("test requires an environment without the WireGuard kernel module")
 			}
 			testInNetworkNamespace(t, func() {
 				wgClient, err := wgctrl.New()
@@ -158,7 +158,7 @@ func haveWireGuardMod(t *testing.T) bool {
 			if strings.Contains(string(out), "Operation not supported") {
 				return
 			}
-			panic(fmt.Errorf("determining if wireguard module exists: %w - output %q", err, string(out)))
+			panic(fmt.Errorf("determining if WireGuard module exists: %w - output %q", err, string(out)))
 		}
 		found = true
 	})
@@ -415,7 +415,7 @@ func TestCreateWGWireGuardGoInterface(t *testing.T) {
 				require.NoErrorf(t, err, "failed: creating wgctrl.Client")
 				defer wgClient.Close()
 
-				iface, err := createWGWireguardGoInterface(ctx, wgClient, tc.options, "wg0")
+				iface, err := createWGWireGuardGoInterface(ctx, wgClient, tc.options, "wg0")
 				if tc.expectError == "" {
 					require.NoError(t, err)
 					require.NotNil(t, iface)

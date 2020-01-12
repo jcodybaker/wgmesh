@@ -36,11 +36,11 @@ Usage:
 Flags:
       --boringtun-extra-args string      extra arguments to pass to boringtun
       --boringtun-path string            path to boringtun userspace driver
-      --driver string                    wireguard driver to use. Valid: auto,existing,boringtun,wireguard-go,kernel (default "auto")
+      --driver string                    WireGuard driver to use. Valid: auto,existing,boringtun,wireguard-go,kernel (default "auto")
       --endpoint-addr string             endpoint address used by peers (default fqdn) (default "ubuntu-bionic")
   -h, --help                             help for agent
       --interface string                 network interface name for the wiregard interface. Use + suffix to auto-select the next available id (ex. wg+ for wg0,wg1... (default "wg+")
-      --ips strings                      ip addresses which should be assigned to the local wireguard interface
+      --ips strings                      ip addresses which should be assigned to the local WireGuard interface
       --keepalive-seconds uint           send keepalive packets every x seconds
       --kube-node string                 specify the Kubernetes node name (optional)
       --kubeconfig string                path to kubeconfig file for the local cluster
@@ -48,7 +48,7 @@ Flags:
       --name string                      name of the endpoint (default hostname) (default "ubuntu-bionic")
       --offer-routes strings             routes which this node will offer to peers
       --peer-selector string             select a subset of peers based on labels
-      --port uint16                      port to bind the wireguard service. 0 = random available port
+      --port uint16                      port to bind the WireGuard service. 0 = random available port
       --registry-kubeconfig string       path to kubeconfig file for registry
       --registry-namespace string        kubernetes namespace
       --reuse-existing-interface         If --interface already exists, and is a compatible WireGuard device, reuse it.

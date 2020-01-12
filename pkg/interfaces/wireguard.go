@@ -53,7 +53,7 @@ const (
 // WireGuardInterface defines the common set of actions which can be taken against a
 // network interface.
 type WireGuardInterface interface {
-	// Inherit everything from the non-wireguard specific Interface interface.
+	// Inherit everything from the non-WireGuard specific Interface interface.
 	Interface
 
 	// ConfigureWireGuard configures WireGuard on the specified interface. See:
@@ -198,7 +198,7 @@ func createWGInterfaceWithName(
 	}
 
 	if options.Driver == WireGuardGoDriver || options.Driver == AutoSelect {
-		iface, err := createWGWireguardGoInterface(ctx, wgClient, options, name)
+		iface, err := createWGWireGuardGoInterface(ctx, wgClient, options, name)
 		if err == nil {
 			return iface, nil
 		}
@@ -207,7 +207,7 @@ func createWGInterfaceWithName(
 			return nil, err
 		}
 	}
-	return nil, errors.New("no wireguard drivers succeeded")
+	return nil, errors.New("no WireGuard drivers succeeded")
 }
 
 func nextInterfaceName(desired, last string) (string, error) {
@@ -296,7 +296,7 @@ func createWGBoringTunInterface(
 	return startWGUserspaceInterface(ctx, wgClient, name, cmd)
 }
 
-func createWGWireguardGoInterface(
+func createWGWireGuardGoInterface(
 	ctx context.Context,
 	wgClient *wgctrl.Client,
 	options *WireGuardInterfaceOptions,
