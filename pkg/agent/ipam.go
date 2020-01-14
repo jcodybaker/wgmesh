@@ -12,6 +12,7 @@ import (
 
 	wgmeshCS "github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/generated/clientset/versioned"
 	wgk8s "github.com/jcodybaker/wgmesh/pkg/apis/wgmesh/v1alpha1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -38,12 +39,66 @@ type ipRange struct {
 	end   net.IP
 }
 
-func (r *registryIPAM) ClaimIPv4(namespace, poolName string) (*net.IPNet, error) {
+func (r *registryIPAM) ClaimIPs(namespace, poolName string, owner *metav1.OwnerReference, count int) ([]*net.IPNet, error) {
+	var claimIPs []*net.IPNet
+	pool, ourClaims, err := r.loadPool(namespace, poolName, owner)
+	if err != nil {
+		return nil, fmt.Errorf("loading pool %s:%s: %w", namespace, poolName, err)
+	}
+	for _, claim := range ourClaims {
+		if count > 0 {
+			ip, cidr, err := net.ParseCIDR(claim.Spec.IP)
+			if err != nil {
+				// If everything is working correctly, the only way this could happen is a user created
+				// claim.  This probably needs to be deleted, but we'll let the user do that.
+				return nil, fmt.Errorf("invalid claim %q for pool %s:%s: %w", claim.Name, namespace, poolName, err)
+			}
+			cidr.IP = ip
+			claimIPs = append(claimIPs, cidr)
+			count--
+		} else {
+			// We don't need this claim, release it.
+			err := r.clientset.
+				WgmeshV1alpha1().
+				IPClaims(namespace).
+				Delete(claim.Name, metav1.NewPreconditionDeleteOptions(string(claim.UID)))
+			if err != nil && !k8sErrors.IsNotFound(err) {
+				return nil, fmt.Errorf("", err)
+			}
+		}
+	}
+	for count > 0 {
+		addr, err := pool.findAddress()
+		if err != nil {
+			return claimIPs, fmt.Errorf("finding address in pool %s:%s: %w", namespace, poolName, err)
+		}
+		name := claimName(poolName, addr.IP.String())
+		claim, err := r.clientset.
+			WgmeshV1alpha1().
+			IPClaims(namespace).
+			Create(&wgk8s.IPClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+				},
+				Spec: wgk8s.IPClaimSpec{},
+			})
+		if err != nil {
+			if k8sErrors.IsAlreadyExists(err) || k8sErrors.IsConflict(err) {
+				// LOG
+				continue
+			}
+			return claimIPs, fmt.Errorf("creating claim %q in pool %s:%s: %w", name, namespace, poolName, err)
+		}
+		count--
+		ourClaims = append(ourClaims, *claim)
+		claimIPs = append(claimIPs, addr)
+	}
 
-	return nil, nil
+	return claimIPs, nil
 }
 
-func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
+func (r *registryIPAM) loadPool(namespace, poolName string, owner *metav1.OwnerReference) (*ipPool, []wgk8s.IPClaim, error) {
 	pool := &ipPool{
 		name:  fmt.Sprintf("%s:%s", namespace, poolName),
 		inUse: make(map[string]struct{}),
@@ -54,49 +109,49 @@ func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
 		IPPools(namespace).
 		Get(poolName, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("getting pool: %w", err)
+		return nil, nil, fmt.Errorf("getting pool: %w", err)
 	}
 
 	// Shuffle the order of ranges so we start with a random one and can visit all if needed.
 	rangeIndexes, err := randPerm(len(poolRecord.Spec.IPRanges))
 	if err != nil {
-		return nil, fmt.Errorf("shuffling ip ranges: %w", err)
+		return nil, nil, fmt.Errorf("shuffling ip ranges: %w", err)
 	}
 	for _, i := range rangeIndexes {
 		ipr := poolRecord.Spec.IPRanges[i]
 		_, cidr, err := net.ParseCIDR(ipr.CIDR)
 		if err != nil {
-			return nil, fmt.Errorf("parsing ipv4.cidr %q", ipr.CIDR)
+			return nil, nil, fmt.Errorf("parsing ipv4.cidr %q", ipr.CIDR)
 		}
 		var start, end net.IP
 		if ipr.Start != "" {
 			start = net.ParseIP(ipr.Start)
 			if start == nil {
-				return nil, fmt.Errorf("parsing ipv4.start %q", ipr.Start)
+				return nil, nil, fmt.Errorf("parsing ipv4.start %q", ipr.Start)
 			}
 			if !cidr.Contains(start) {
-				return nil, fmt.Errorf("ipv4.start %q was not contained by cidr %q",
+				return nil, nil, fmt.Errorf("ipv4.start %q was not contained by cidr %q",
 					ipr.Start, cidr.String())
 			}
 		} else {
 			start, err = defaultRangeStart(cidr)
 			if err != nil {
-				return nil, fmt.Errorf("calculating default end address: %w", err)
+				return nil, nil, fmt.Errorf("calculating default end address: %w", err)
 			}
 		}
 		if ipr.End != "" {
 			end = net.ParseIP(ipr.End)
 			if end == nil {
-				return nil, fmt.Errorf("parsing ipv4.end %q", ipr.End)
+				return nil, nil, fmt.Errorf("parsing ipv4.end %q", ipr.End)
 			}
 			if !cidr.Contains(end) {
-				return nil, fmt.Errorf("ipv4.end %q was not contained by cidr %q",
+				return nil, nil, fmt.Errorf("ipv4.end %q was not contained by cidr %q",
 					ipr.End, cidr.String())
 			}
 		} else {
 			end, err = defaultRangeEnd(cidr)
 			if err != nil {
-				return nil, fmt.Errorf("calculating default end address: %w", err)
+				return nil, nil, fmt.Errorf("calculating default end address: %w", err)
 			}
 		}
 		pool.ranges = append(pool.ranges, &ipRange{
@@ -110,7 +165,7 @@ func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
 		// These are user provided, parse them and then serialize them in canonical format.
 		reserved := net.ParseIP(ip)
 		if reserved == nil {
-			return nil, fmt.Errorf("parsing reserved ip %q", ip)
+			return nil, nil, fmt.Errorf("parsing reserved ip %q", ip)
 		}
 		pool.inUse[reserved.String()] = struct{}{}
 	}
@@ -122,20 +177,27 @@ func (r *registryIPAM) loadPool(namespace, poolName string) (*ipPool, error) {
 			LabelSelector: "",
 		})
 	if err != nil {
-		return nil, fmt.Errorf("listing claims: %w", err)
+		return nil, nil, fmt.Errorf("listing claims: %w", err)
 	}
+
+	var ourClaims []wgk8s.IPClaim
 
 	for _, claim := range claims.Items {
 		// These are user provided, parse them and then serialize them in canonical format.
 		reserved := net.ParseIP(claim.Spec.IP)
 		if reserved == nil {
-			return nil, fmt.Errorf(`parsing claim "%s:%s" - ip %q`,
+			return nil, nil, fmt.Errorf(`parsing claim "%s:%s" - ip %q`,
 				namespace, claim.GetName(), claim.Spec.IP)
+		}
+		for _, o := range claim.GetOwnerReferences() {
+			if o.Name == owner.Name && o.APIVersion == owner.APIVersion && o.Kind == owner.Kind {
+				ourClaims = append(ourClaims, claim)
+			}
 		}
 		pool.inUse[reserved.String()] = struct{}{}
 	}
 
-	return pool, nil
+	return pool, ourClaims, nil
 }
 
 // findAddress finds an available IP in the provided CIDR.
